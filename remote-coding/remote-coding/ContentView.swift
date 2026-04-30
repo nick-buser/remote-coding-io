@@ -8,17 +8,33 @@
 import SwiftUI
 
 struct ContentView: View {
+    @Environment(AppModel.self) private var appModel
+
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        TabView(selection: selectedTabBinding) {
+            ProjectListView()
+                .tabItem {
+                    Label("Projects", systemImage: "folder")
+                }
+                .tag(AppTab.projects)
+
+            TerminalView()
+                .tabItem {
+                    Label("Terminal", systemImage: "terminal")
+                }
+                .tag(AppTab.terminal)
         }
-        .padding()
+    }
+
+    private var selectedTabBinding: Binding<AppTab> {
+        Binding(
+            get: { appModel.selectedTab },
+            set: { appModel.selectedTab = $0 }
+        )
     }
 }
 
 #Preview {
     ContentView()
+        .environment(AppModel(repository: MockTmuxAgentRepository()))
 }
