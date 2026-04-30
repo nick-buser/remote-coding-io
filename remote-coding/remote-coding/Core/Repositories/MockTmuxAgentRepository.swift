@@ -5,6 +5,7 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
     private var projects: [OpenAPI.Project]
     private var features: [OpenAPI.Feature]
     private var sessions: [OpenAPI.Session]
+    private var sessionScopes: [String: SessionScope]
     private var panesBySession: [String: [OpenAPI.Pane]]
     private var outputsByPane: [String: OpenAPI.PaneOutput]
     private var documents: [WorkspaceDocument]
@@ -14,12 +15,30 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
         projects = Self.decode([OpenAPI.Project].self, from: Self.projectsJSON)
         features = Self.decode([OpenAPI.Feature].self, from: Self.featuresJSON)
         sessions = Self.decode([OpenAPI.Session].self, from: Self.sessionsJSON)
+        sessionScopes = [
+            "tmux_server_coding_app": SessionScope(projectID: 1, featureID: nil),
+            "tmux_agent_service_0031": SessionScope(projectID: 1, featureID: 11),
+            "remote_coding_ios": SessionScope(projectID: 2, featureID: nil),
+            "remote_coding_ios_service_0001": SessionScope(projectID: 2, featureID: 21)
+        ]
 
-        let panes = Self.decode([OpenAPI.Pane].self, from: Self.panesJSON)
-        panesBySession = ["tmux_server_coding_app": panes]
+        let tmuxAgentPanes = Self.decode([OpenAPI.Pane].self, from: Self.tmuxAgentPanesJSON)
+        let tmuxAgentFeaturePanes = Self.decode([OpenAPI.Pane].self, from: Self.tmuxAgentFeaturePanesJSON)
+        let iOSProjectPanes = Self.decode([OpenAPI.Pane].self, from: Self.iOSProjectPanesJSON)
+        let iOSFeaturePanes = Self.decode([OpenAPI.Pane].self, from: Self.iOSFeaturePanesJSON)
+        panesBySession = [
+            "tmux_server_coding_app": tmuxAgentPanes,
+            "tmux_agent_service_0031": tmuxAgentFeaturePanes,
+            "remote_coding_ios": iOSProjectPanes,
+            "remote_coding_ios_service_0001": iOSFeaturePanes
+        ]
 
         let output = Self.decode(OpenAPI.PaneOutput.self, from: Self.paneOutputJSON)
-        outputsByPane = ["tmux_server_coding_app:0": output]
+        let iOSOutput = Self.decode(OpenAPI.PaneOutput.self, from: Self.iOSPaneOutputJSON)
+        outputsByPane = [
+            "tmux_server_coding_app:0": output,
+            "remote_coding_ios:0": iOSOutput
+        ]
 
         documents = Self.seedDocuments
     }
@@ -111,12 +130,31 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
     func openProjectSession(idOrSlug: String) async throws -> OpenAPI.Project {
         var project = try await getProject(idOrSlug: idOrSlug)
         if project.tmuxSessionName == nil {
-            project.tmuxSessionName = project.name
+            project.tmuxSessionName = defaultSessionName(for: project)
         }
         if let index = projects.firstIndex(where: { $0.id == project.id }) {
             projects[index] = project
         }
         return project
+    }
+
+    func listSessions(projectID: Int64) async throws -> [OpenAPI.Session] {
+        scopedSessions { scope in
+            scope.projectID == projectID && scope.featureID == nil
+        }
+    }
+
+    func listSessions(featureID: Int64) async throws -> [OpenAPI.Session] {
+        guard let feature = features.first(where: { $0.id == featureID }) else {
+            throw MockRepositoryError.notFound
+        }
+        let featureSessions = scopedSessions { scope in
+            scope.featureID == featureID
+        }
+        if !featureSessions.isEmpty {
+            return featureSessions
+        }
+        return try await listSessions(projectID: feature.projectID)
     }
 
     func listSessions() async throws -> [OpenAPI.Session] {
@@ -159,6 +197,23 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
         return typed
     }
 
+    private func scopedSessions(matching predicate: (SessionScope) -> Bool) -> [OpenAPI.Session] {
+        sessions.filter { session in
+            guard let scope = sessionScopes[session.name] else {
+                return false
+            }
+            return predicate(scope)
+        }
+    }
+
+    private func defaultSessionName(for project: OpenAPI.Project) -> String {
+        switch project.id {
+        case 1: "tmux_server_coding_app"
+        case 2: "remote_coding_ios"
+        default: project.slug.replacingOccurrences(of: "-", with: "_")
+        }
+    }
+
     private static func decode<T: Decodable>(_ type: T.Type, from json: String) -> T {
         do {
             return try JSONDecoder.openAPI.decode(T.self, from: Data(json.utf8))
@@ -166,6 +221,11 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
             fatalError("Invalid OpenAPI mock fixture: \(error)")
         }
     }
+}
+
+private struct SessionScope: Hashable {
+    let projectID: Int64
+    let featureID: Int64?
 }
 
 struct SentInput: Hashable {
@@ -261,11 +321,32 @@ private extension MockTmuxAgentRepository {
         "created": "2026-04-30T05:10:00Z",
         "windows": 1,
         "directory": "/Users/nickbuser/Projects/personal_coding/tmux_server_coding_app"
+      },
+      {
+        "name": "tmux_agent_service_0031",
+        "attached": false,
+        "created": "2026-04-30T05:40:00Z",
+        "windows": 1,
+        "directory": "/Users/nickbuser/Projects/personal_coding/tmux_server_coding_app"
+      },
+      {
+        "name": "remote_coding_ios",
+        "attached": false,
+        "created": "2026-04-30T06:00:00Z",
+        "windows": 1,
+        "directory": "/Users/nickbuser/Projects/personal_coding/tmux_server_coding_app/ios_apps"
+      },
+      {
+        "name": "remote_coding_ios_service_0001",
+        "attached": false,
+        "created": "2026-04-30T06:10:00Z",
+        "windows": 1,
+        "directory": "/Users/nickbuser/Projects/personal_coding/tmux_server_coding_app/ios_apps"
       }
     ]
     """
 
-    static let panesJSON = """
+    static let tmuxAgentPanesJSON = """
     [
       {
         "index": 0,
@@ -286,11 +367,58 @@ private extension MockTmuxAgentRepository {
     ]
     """
 
+    static let tmuxAgentFeaturePanesJSON = """
+    [
+      {
+        "index": 0,
+        "title": "service-0031",
+        "width": 120,
+        "height": 40,
+        "active": true,
+        "directory": "/Users/nickbuser/Projects/personal_coding/tmux_server_coding_app"
+      }
+    ]
+    """
+
+    static let iOSProjectPanesJSON = """
+    [
+      {
+        "index": 0,
+        "title": "ios-plan",
+        "width": 96,
+        "height": 34,
+        "active": true,
+        "directory": "/Users/nickbuser/Projects/personal_coding/tmux_server_coding_app/ios_apps"
+      }
+    ]
+    """
+
+    static let iOSFeaturePanesJSON = """
+    [
+      {
+        "index": 0,
+        "title": "service-0001",
+        "width": 96,
+        "height": 34,
+        "active": true,
+        "directory": "/Users/nickbuser/Projects/personal_coding/tmux_server_coding_app/ios_apps"
+      }
+    ]
+    """
+
     static let paneOutputJSON = """
     {
       "session_name": "tmux_server_coding_app",
       "pane_index": 0,
       "content": "$ go test ./...\\nok  github.com/nickbuser/tmux-agent/internal/store/sqlite  0.412s\\n?   github.com/nickbuser/tmux-agent/cmd  [no test files]\\n\\nContinue with generated client wiring? [y/N] "
+    }
+    """
+
+    static let iOSPaneOutputJSON = """
+    {
+      "session_name": "remote_coding_ios",
+      "pane_index": 0,
+      "content": "$ xcodebuild build-for-testing ...\\n** TEST BUILD SUCCEEDED **\\n\\nReady to refine project-scoped pane routing. "
     }
     """
 
@@ -363,4 +491,3 @@ private extension MockTmuxAgentRepository {
         ]
     }
 }
-
