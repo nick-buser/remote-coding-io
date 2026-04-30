@@ -68,6 +68,16 @@ gh pr list --head <branch-name> --json state,number
 - Stage every file created or modified for the task.
 - Do not read `.env` files. `.env.example` is safe.
 
+### Work history
+
+At the end of every ticket, add a reflective work-history note in:
+
+```sh
+docs/workhistory/<prefix-####>.md
+```
+
+This is not a changelog. Write it for future maintainers: what changed, why the direction was chosen, what tradeoffs or follow-up constraints matter, and what would be easy to forget later. The filename should match the branch/ticket name exactly, such as `docs/workhistory/fix-0002.md`.
+
 ### iOS folder note
 
 `ios_apps/` is currently ignored by the root `.gitignore` and also contains its own `.git` directory. When working on the app, check the iOS repo state directly:
