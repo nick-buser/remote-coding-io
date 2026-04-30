@@ -40,4 +40,17 @@ struct remote_codingTests {
         #expect(repository.sentInputs[1].body.keys == ["C-c"])
     }
 
+    @MainActor
+    @Test func sessionsAreScopedToProjectAndFeature() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let tmuxAgentSessions = try await repository.listSessions(projectID: 1)
+        let iOSSessions = try await repository.listSessions(projectID: 2)
+        let iOSFeatureSessions = try await repository.listSessions(featureID: 21)
+
+        #expect(tmuxAgentSessions.map(\.name) == ["tmux_server_coding_app"])
+        #expect(iOSSessions.map(\.name) == ["remote_coding_ios"])
+        #expect(iOSFeatureSessions.map(\.name) == ["remote_coding_ios_service_0001"])
+    }
+
 }

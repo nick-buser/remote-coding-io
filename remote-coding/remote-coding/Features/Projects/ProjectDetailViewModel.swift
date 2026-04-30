@@ -22,7 +22,7 @@ final class ProjectDetailViewModel {
         do {
             async let loadedFeatures = repository.listFeatures(projectIDOrSlug: project.slug)
             async let loadedDocuments = repository.listProjectDocuments(projectID: project.id)
-            async let loadedSessions = repository.listSessions()
+            async let loadedSessions = repository.listSessions(projectID: project.id)
             features = try await loadedFeatures
             documents = try await loadedDocuments
             sessions = try await loadedSessions
@@ -38,7 +38,7 @@ final class ProjectDetailViewModel {
     func openProjectSession(repository: TmuxAgentRepository) async {
         do {
             project = try await repository.openProjectSession(idOrSlug: project.slug)
-            sessions = try await repository.listSessions()
+            sessions = try await repository.listSessions(projectID: project.id)
             for session in sessions {
                 panes[session.name] = try await repository.listPanes(sessionName: session.name)
             }
@@ -47,4 +47,3 @@ final class ProjectDetailViewModel {
         }
     }
 }
-

@@ -19,7 +19,7 @@ final class FeatureDetailViewModel {
     func load(repository: TmuxAgentRepository) async {
         do {
             async let loadedDocuments = repository.listFeatureDocuments(featureID: feature.id)
-            async let loadedSessions = repository.listSessions()
+            async let loadedSessions = repository.listSessions(featureID: feature.id)
             documents = try await loadedDocuments
             sessions = try await loadedSessions
             for session in sessions {
@@ -30,4 +30,3 @@ final class FeatureDetailViewModel {
         }
     }
 }
-

@@ -11,9 +11,10 @@ protocol TmuxAgentRepository {
     func listFeatureDocuments(featureID: Int64) async throws -> [WorkspaceDocument]
     func saveDocument(_ document: WorkspaceDocument) async throws -> WorkspaceDocument
     func openProjectSession(idOrSlug: String) async throws -> OpenAPI.Project
+    func listSessions(projectID: Int64) async throws -> [OpenAPI.Session]
+    func listSessions(featureID: Int64) async throws -> [OpenAPI.Session]
     func listSessions() async throws -> [OpenAPI.Session]
     func listPanes(sessionName: String) async throws -> [OpenAPI.Pane]
     func getPaneOutput(sessionName: String, paneID: Int) async throws -> OpenAPI.PaneOutput
     func sendPaneInput(sessionName: String, paneID: Int, body: OpenAPI.SendInputRequest) async throws -> OpenAPI.StatusResponse
 }
-
