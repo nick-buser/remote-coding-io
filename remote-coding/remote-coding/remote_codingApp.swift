@@ -9,7 +9,7 @@ import SwiftUI
 
 @main
 struct remote_codingApp: App {
-    @State private var appModel = AppModel(repository: MockTmuxAgentRepository())
+    @State private var appModel = AppModel()
 
     var body: some Scene {
         WindowGroup {

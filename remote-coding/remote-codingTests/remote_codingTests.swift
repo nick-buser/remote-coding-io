@@ -5,6 +5,7 @@
 //  Created by Nick Buser on 4/30/26.
 //
 
+import Foundation
 import Testing
 @testable import remote_coding
 
@@ -51,6 +52,21 @@ struct remote_codingTests {
         #expect(tmuxAgentSessions.map(\.name) == ["tmux_server_coding_app"])
         #expect(iOSSessions.map(\.name) == ["remote_coding_ios"])
         #expect(iOSFeatureSessions.map(\.name) == ["remote_coding_ios_service_0001"])
+    }
+
+    @Test func apiConfigurationValidatesAndNormalizesBaseURL() throws {
+        let configuration = try APIConfiguration(baseURLString: "  http://192.168.1.10:8080/  ")
+
+        #expect(configuration.baseURL.absoluteString == "http://192.168.1.10:8080")
+        #expect(throws: APIConfigurationError.self) {
+            _ = try APIConfiguration(baseURLString: "ftp://example.com")
+        }
+    }
+
+    @Test func apiPathEscapesDynamicComponents() {
+        let path = APIPath.join("api", "v1", "sessions", "project one", "panes", "0", "input")
+
+        #expect(path == "/api/v1/sessions/project%20one/panes/0/input")
     }
 
 }
