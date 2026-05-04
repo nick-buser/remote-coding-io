@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>tmux-agent — PM hub design</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css" />
+<style>
+  body { background: #f0eee9; }
+  /* Designer notes header */
+  .notes {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 32px 24px 8px;
+    font-family: 'Inter', system-ui, sans-serif;
+    color: #2a2a26;
+  }
+  .notes h1 { font-size: 22px; font-weight: 700; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .notes .lede { font-size: 14px; color: #5d5b55; margin: 0 0 18px; max-width: 64ch; line-height: 1.55; }
+  .notes .system {
+    background: #fff; border: 1px solid #ebe9e3; border-radius: 8px;
+    padding: 14px 18px; font-size: 13px; color: #2a2a26;
+    display: grid; grid-template-columns: 130px 1fr; gap: 6px 18px; line-height: 1.5;
+  }
+  .notes .system dt { color: #8a877e; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .notes .system dd { margin: 0; }
+</style>
+</head>
+<body>
+
+<div class="notes">
+  <h1>multi-project PM hub — Linear-esque</h1>
+  <p class="lede">
+    Projects are the root: each is its own product with its own features, milestones, and live agent sessions.
+    Features are children of projects; tickets are children of features; sessions spawn from tickets. The sidebar is
+    project-scoped — switch project from the top, browse its features below — and an <strong>All projects</strong> view
+    shows the full workspace at a glance. Toggle <strong>Tweaks</strong> to flip accent and density.
+  </p>
+  <dl class="system">
+    <dt>Hierarchy</dt><dd>Project ▸ Feature ▸ (PRD, Eng design, Decisions) + Tickets ▸ Sessions</dd>
+    <dt>ID system</dt><dd>PRJ-## projects · FEAT-### features · TMX-#### tickets — all auto-assigned</dd>
+    <dt>Type</dt><dd>Inter (UI), JetBrains Mono (IDs, code, timestamps)</dd>
+    <dt>Accent hues</dt><dd>iris · amber · mint · rose · slate (oklch, fixed C+L, vary H)</dd>
+    <dt>Out of scope</dt><dd>Cross-project rollups, multi-stakeholder workflows, branch authoring UI</dd>
+  </dl>
+</div>
+
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="data.jsx"></script>
+<script type="text/babel" src="linear-hub.jsx"></script>
+
+<script type="text/babel">
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accent": "iris",
+  "listMode": "row",
+  "density": "comfy"
+}/*EDITMODE-END*/;
+
+function App() {
+  const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+
+  return (
+    <>
+      <DesignCanvas>
+        <DCSection id="hub" title="PM hub" subtitle="Projects as the root — features nest underneath">
+          <DCArtboard id="linear" label="Linear-esque · multi-project — switch project from the top, browse its features in the side" width={1320} height={900}>
+            <LinearHub accent={tweaks.accent} density={tweaks.density} listMode={tweaks.listMode} />
+          </DCArtboard>
+        </DCSection>
+      </DesignCanvas>
+
+      <TweaksPanel title="Tweaks">
+        <TweakSection title="Accent">
+          <TweakRadio
+            value={tweaks.accent}
+            options={[
+              { value: 'iris', label: 'Iris' },
+              { value: 'amber', label: 'Amber' },
+              { value: 'mint', label: 'Mint' },
+              { value: 'rose', label: 'Rose' },
+            ]}
+            onChange={(v) => setTweak('accent', v)}
+          />
+        </TweakSection>
+        <TweakSection title="List rendering">
+          <TweakRadio
+            value={tweaks.listMode}
+            options={[
+              { value: 'row', label: 'Rows' },
+              { value: 'card', label: 'Cards' },
+            ]}
+            onChange={(v) => setTweak('listMode', v)}
+          />
+        </TweakSection>
+        <TweakSection title="Density (Linear)">
+          <TweakRadio
+            value={tweaks.density}
+            options={[
+              { value: 'dense', label: 'Dense' },
+              { value: 'comfy', label: 'Comfy' },
+            ]}
+            onChange={(v) => setTweak('density', v)}
+          />
+        </TweakSection>
+      </TweaksPanel>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+
+</body>
+</html>

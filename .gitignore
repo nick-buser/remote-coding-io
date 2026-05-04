@@ -28,6 +28,9 @@ Carthage/Build/
 !.env.example
 *.xcconfig.local
 
+# Claude Code per-user overrides (team config lives in .claude/settings.json)
+.claude/settings.local.json
+
 # Logs and reports
 *.log
 fastlane/report.xml

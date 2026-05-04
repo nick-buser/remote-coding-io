@@ -10,6 +10,7 @@ Native iOS client for the `tmux-agent` backend. The app exists because the mobil
 - **Current deployment target:** iOS `26.4` as generated in the Xcode project
 - **Dependency management:** Swift Package Manager
 - **Backend contract:** `../api/openapi.yaml`
+- **Active plan:** `docs/feature_plans/00-overview.md` — read this first. It defines the v2 design scope, the five-phase ticket sequencing, and which ticket to pick up next.
 
 ### Product Shape
 
@@ -57,7 +58,8 @@ git fetch origin
 ### Git rules
 
 - Never push directly to `main`.
-- Use root branch naming: `<prefix>-<####>` such as `service-0031`, `docs-0032`, or `fix-0033`.
+- Branch naming: `<prefix>-<####>`, zero-padded 4-digit number. Numbering is **per-prefix** — each of `service-`, `fix-`, `docs-`, `chore-`, `infra-` has its own counter. The next `service-NNNN` is computed by scanning only existing `service-NNNN` branches (local + remote) and ticket / work-history files. Use `~/.claude/bin/branch-new <prefix> [title]` (or the `/branch-new` slash command) — it does the per-prefix scan correctly.
+- Do **not** delete merged branches from `origin`. The branch-name ledger is the source of truth for the per-prefix counter; deleting a remote branch leaves only `.workhistory/` to keep the number reserved.
 - Before every push, verify the branch still has an open PR:
 
 ```sh
@@ -68,25 +70,87 @@ gh pr list --head <branch-name> --json state,number
 - Stage every file created or modified for the task.
 - Do not read `.env` files. `.env.example` is safe.
 
+### Ticket system
+
+Tickets live in `.tickets/`. They capture scope and acceptance criteria **before** work begins. Creating a ticket is recommended but not required — small chores or obvious fixes can go straight to a branch.
+
+**Naming:** `<prefix>-<short-description>.md` — prefix only, no branch number (numbers are assigned when the branch is created).
+
+```
+.tickets/service-project-list-view.md
+.tickets/fix-websocket-reconnect.md
+```
+
+**Status flow:** `todo → active → done`. When a ticket is done, move it to `.tickets/done/` rather than deleting it.
+
+**Template:**
+
+```markdown
+---
+prefix: service
+title: Add project list view
+status: todo   # todo | active | done
+branch:        # filled in once branch is created, e.g. service-0005
+---
+
+## Description
+
+## Acceptance criteria
+
+- [ ] ...
+
+## Notes
+```
+
 ### Work history
 
 At the end of every ticket, add a reflective work-history note in:
 
 ```sh
-docs/workhistory/<prefix-####>.md
+.workhistory/<prefix-####>.md
 ```
 
-This is not a changelog. Write it for future maintainers: what changed, why the direction was chosen, what tradeoffs or follow-up constraints matter, and what would be easy to forget later. The filename should match the branch/ticket name exactly, such as `docs/workhistory/fix-0002.md`.
+This is not a changelog. Write it for future maintainers: what changed, why the direction was chosen, what tradeoffs or follow-up constraints matter, and what would be easy to forget later. The filename must match the branch name exactly (e.g., `fix-0002.md`). If a ticket exists for the work, reference it in the header.
+
+**Template:**
+
+```markdown
+# <prefix-####>: <title>
+
+Ticket: `.tickets/<prefix>-<short-description>.md`
+
+## Summary
+
+## Changes
+
+## Decisions
+
+## Notes
+```
 
 ### iOS folder note
 
-`ios_apps/` is currently ignored by the root `.gitignore` and also contains its own `.git` directory. When working on the app, check the iOS repo state directly:
+`ios_apps/` is currently ignored by the root `.gitignore` and also contains its own `.git` directory with its own GitHub remote (`git@github.com:nick-buser/remote-coding-io.git`). Use the `gh` CLI for PRs here — `tea` / Gitea are root-repo only. When working on the app, check the iOS repo state directly:
 
 ```sh
 git -C ios_apps status --short --branch
 ```
 
 If the iOS app is later folded into the root repo, remove the nested git repository and update `.gitignore` deliberately in the same PR.
+
+### Verifying iOS work
+
+Before opening a PR, run the iOS build + tests. The `/ios-gates` slash command is the canonical wrapper, but the underlying invocation is:
+
+```sh
+xcodebuild \
+  -project remote-coding/remote-coding.xcodeproj \
+  -scheme remote-coding \
+  -destination 'platform=iOS Simulator,name=iPhone 16' \
+  build test
+```
+
+If the project structure changes (new scheme, renamed target), update both this snippet and `.claude/commands/ios-gates.md` together.
 
 ---
 
