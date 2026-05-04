@@ -23,6 +23,12 @@ struct ContentView: View {
                     Label("Terminal", systemImage: "terminal")
                 }
                 .tag(AppTab.terminal)
+
+            SettingsView()
+                .tabItem {
+                    Label("Settings", systemImage: "gearshape")
+                }
+                .tag(AppTab.settings)
         }
     }
 
