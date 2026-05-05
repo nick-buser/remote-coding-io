@@ -2,30 +2,40 @@ import Foundation
 
 @MainActor
 final class MockTmuxAgentRepository: TmuxAgentRepository {
-    private var projects: [OpenAPI.Project]
-    private var features: [OpenAPI.Feature]
-    private var sessions: [OpenAPI.Session]
+    private var projects: [Components.Schemas.Project]
+    private var features: [Components.Schemas.Feature]
+    private var sessions: [Components.Schemas.Session]
     private var sessionScopes: [String: SessionScope]
-    private var panesBySession: [String: [OpenAPI.Pane]]
-    private var outputsByPane: [String: OpenAPI.PaneOutput]
+    private var panesBySession: [String: [Components.Schemas.Pane]]
+    private var outputsByPane: [String: Components.Schemas.PaneOutput]
+    // The contract's Project schema does not carry tmux_session_name.
+    // The mock keeps the prototype's project↔tmux-session mapping in a
+    // sidecar map so openProjectSession / listSessions(projectID:) can
+    // still satisfy preview wiring without leaking a contract-divergent
+    // field onto the project type.
+    private var tmuxSessionByProjectID: [Int64: String]
     private var documents: [WorkspaceDocument]
     private(set) var sentInputs: [SentInput] = []
 
     init() {
-        projects = Self.decode([OpenAPI.Project].self, from: Self.projectsJSON)
-        features = Self.decode([OpenAPI.Feature].self, from: Self.featuresJSON)
-        sessions = Self.decode([OpenAPI.Session].self, from: Self.sessionsJSON)
+        projects = Self.decode([Components.Schemas.Project].self, from: Self.projectsJSON)
+        features = Self.decode([Components.Schemas.Feature].self, from: Self.featuresJSON)
+        sessions = Self.decode([Components.Schemas.Session].self, from: Self.sessionsJSON)
         sessionScopes = [
             "tmux_server_coding_app": SessionScope(projectID: 1, featureID: nil),
             "tmux_agent_service_0031": SessionScope(projectID: 1, featureID: 11),
             "remote_coding_ios": SessionScope(projectID: 2, featureID: nil),
             "remote_coding_ios_service_0001": SessionScope(projectID: 2, featureID: 21)
         ]
+        tmuxSessionByProjectID = [
+            1: "tmux_server_coding_app"
+            // Project 2 starts unlinked; openProjectSession assigns it on demand.
+        ]
 
-        let tmuxAgentPanes = Self.decode([OpenAPI.Pane].self, from: Self.tmuxAgentPanesJSON)
-        let tmuxAgentFeaturePanes = Self.decode([OpenAPI.Pane].self, from: Self.tmuxAgentFeaturePanesJSON)
-        let iOSProjectPanes = Self.decode([OpenAPI.Pane].self, from: Self.iOSProjectPanesJSON)
-        let iOSFeaturePanes = Self.decode([OpenAPI.Pane].self, from: Self.iOSFeaturePanesJSON)
+        let tmuxAgentPanes = Self.decode([Components.Schemas.Pane].self, from: Self.tmuxAgentPanesJSON)
+        let tmuxAgentFeaturePanes = Self.decode([Components.Schemas.Pane].self, from: Self.tmuxAgentFeaturePanesJSON)
+        let iOSProjectPanes = Self.decode([Components.Schemas.Pane].self, from: Self.iOSProjectPanesJSON)
+        let iOSFeaturePanes = Self.decode([Components.Schemas.Pane].self, from: Self.iOSFeaturePanesJSON)
         panesBySession = [
             "tmux_server_coding_app": tmuxAgentPanes,
             "tmux_agent_service_0031": tmuxAgentFeaturePanes,
@@ -33,8 +43,8 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
             "remote_coding_ios_service_0001": iOSFeaturePanes
         ]
 
-        let output = Self.decode(OpenAPI.PaneOutput.self, from: Self.paneOutputJSON)
-        let iOSOutput = Self.decode(OpenAPI.PaneOutput.self, from: Self.iOSPaneOutputJSON)
+        let output = Self.decode(Components.Schemas.PaneOutput.self, from: Self.paneOutputJSON)
+        let iOSOutput = Self.decode(Components.Schemas.PaneOutput.self, from: Self.iOSPaneOutputJSON)
         outputsByPane = [
             "tmux_server_coding_app:0": output,
             "remote_coding_ios:0": iOSOutput
@@ -43,7 +53,7 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
         documents = Self.seedDocuments
     }
 
-    func listProjects() async throws -> [OpenAPI.Project] {
+    func listProjects() async throws -> [Components.Schemas.Project] {
         projects.sorted { lhs, rhs in
             if lhs.pinned != rhs.pinned {
                 return lhs.pinned && !rhs.pinned
@@ -52,22 +62,21 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
         }
     }
 
-    func getProject(idOrSlug: String) async throws -> OpenAPI.Project {
+    func getProject(idOrSlug: String) async throws -> Components.Schemas.Project {
         guard let project = projects.first(where: { String($0.id) == idOrSlug || $0.slug == idOrSlug }) else {
             throw MockRepositoryError.notFound
         }
         return project
     }
 
-    func updateProject(idOrSlug: String, body: OpenAPI.UpdateProjectRequest) async throws -> OpenAPI.Project {
+    func updateProject(idOrSlug: String, body: Components.Schemas.UpdateProjectRequest) async throws -> Components.Schemas.Project {
         guard let index = projects.firstIndex(where: { String($0.id) == idOrSlug || $0.slug == idOrSlug }) else {
             throw MockRepositoryError.notFound
         }
         projects[index].name = body.name
         projects[index].slug = body.slug ?? projects[index].slug
-        projects[index].gitRepoURL = body.gitRepoURL
+        projects[index].gitRepoUrl = body.gitRepoUrl
         projects[index].localRepoPath = body.localRepoPath
-        projects[index].tmuxSessionName = body.tmuxSessionName
         projects[index].tagline = body.tagline
         projects[index].description = body.description
         projects[index].accent = body.accent
@@ -78,19 +87,19 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
         return projects[index]
     }
 
-    func listFeatures(projectIDOrSlug: String) async throws -> [OpenAPI.Feature] {
+    func listFeatures(projectIDOrSlug: String) async throws -> [Components.Schemas.Feature] {
         let project = try await getProject(idOrSlug: projectIDOrSlug)
-        return features.filter { $0.projectID == project.id }
+        return features.filter { $0.projectId == project.id }
     }
 
-    func getFeature(id: Int64) async throws -> OpenAPI.Feature {
+    func getFeature(id: Int64) async throws -> Components.Schemas.Feature {
         guard let feature = features.first(where: { $0.id == id }) else {
             throw MockRepositoryError.notFound
         }
         return feature
     }
 
-    func updateFeatureStatus(id: Int64, body: OpenAPI.UpdateFeatureStatusRequest) async throws -> OpenAPI.Feature {
+    func updateFeatureStatus(id: Int64, body: Components.Schemas.UpdateFeatureStatusRequest) async throws -> Components.Schemas.Feature {
         guard let index = features.firstIndex(where: { $0.id == id }) else {
             throw MockRepositoryError.notFound
         }
@@ -127,24 +136,21 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
         return saved
     }
 
-    func openProjectSession(idOrSlug: String) async throws -> OpenAPI.Project {
-        var project = try await getProject(idOrSlug: idOrSlug)
-        if project.tmuxSessionName == nil {
-            project.tmuxSessionName = defaultSessionName(for: project)
-        }
-        if let index = projects.firstIndex(where: { $0.id == project.id }) {
-            projects[index] = project
+    func openProjectSession(idOrSlug: String) async throws -> Components.Schemas.Project {
+        let project = try await getProject(idOrSlug: idOrSlug)
+        if tmuxSessionByProjectID[project.id] == nil {
+            tmuxSessionByProjectID[project.id] = defaultSessionName(for: project)
         }
         return project
     }
 
-    func listSessions(projectID: Int64) async throws -> [OpenAPI.Session] {
+    func listSessions(projectID: Int64) async throws -> [Components.Schemas.Session] {
         scopedSessions { scope in
             scope.projectID == projectID && scope.featureID == nil
         }
     }
 
-    func listSessions(featureID: Int64) async throws -> [OpenAPI.Session] {
+    func listSessions(featureID: Int64) async throws -> [Components.Schemas.Session] {
         guard let feature = features.first(where: { $0.id == featureID }) else {
             throw MockRepositoryError.notFound
         }
@@ -154,35 +160,35 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
         if !featureSessions.isEmpty {
             return featureSessions
         }
-        return try await listSessions(projectID: feature.projectID)
+        return try await listSessions(projectID: feature.projectId)
     }
 
-    func listSessions() async throws -> [OpenAPI.Session] {
+    func listSessions() async throws -> [Components.Schemas.Session] {
         sessions
     }
 
-    func listPanes(sessionName: String) async throws -> [OpenAPI.Pane] {
+    func listPanes(sessionName: String) async throws -> [Components.Schemas.Pane] {
         panesBySession[sessionName] ?? []
     }
 
-    func getPaneOutput(sessionName: String, paneID: Int) async throws -> OpenAPI.PaneOutput {
-        outputsByPane["\(sessionName):\(paneID)"] ?? OpenAPI.PaneOutput(
+    func getPaneOutput(sessionName: String, paneID: Int) async throws -> Components.Schemas.PaneOutput {
+        outputsByPane["\(sessionName):\(paneID)"] ?? Components.Schemas.PaneOutput(
             sessionName: sessionName,
             paneIndex: paneID,
             content: ""
         )
     }
 
-    func sendPaneInput(sessionName: String, paneID: Int, body: OpenAPI.SendInputRequest) async throws -> OpenAPI.StatusResponse {
+    func sendPaneInput(sessionName: String, paneID: Int, body: Components.Schemas.SendInputRequest) async throws -> Components.Schemas.StatusResponse {
         sentInputs.append(SentInput(sessionName: sessionName, paneID: paneID, body: body))
         let key = "\(sessionName):\(paneID)"
-        var output = outputsByPane[key] ?? OpenAPI.PaneOutput(sessionName: sessionName, paneIndex: paneID, content: "")
+        var output = outputsByPane[key] ?? Components.Schemas.PaneOutput(sessionName: sessionName, paneIndex: paneID, content: "")
         output.content += transcriptLine(for: body)
         outputsByPane[key] = output
-        return OpenAPI.StatusResponse(status: "sent")
+        return Components.Schemas.StatusResponse(status: "sent")
     }
 
-    private func transcriptLine(for body: OpenAPI.SendInputRequest) -> String {
+    private func transcriptLine(for body: Components.Schemas.SendInputRequest) -> String {
         let typed = body.text ?? ""
         let keyText = body.keys?.joined(separator: " ") ?? ""
         if typed.isEmpty && (body.enter == true || body.keys?.contains("Enter") == true) {
@@ -197,7 +203,7 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
         return typed
     }
 
-    private func scopedSessions(matching predicate: (SessionScope) -> Bool) -> [OpenAPI.Session] {
+    private func scopedSessions(matching predicate: (SessionScope) -> Bool) -> [Components.Schemas.Session] {
         sessions.filter { session in
             guard let scope = sessionScopes[session.name] else {
                 return false
@@ -206,7 +212,7 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
         }
     }
 
-    private func defaultSessionName(for project: OpenAPI.Project) -> String {
+    private func defaultSessionName(for project: Components.Schemas.Project) -> String {
         switch project.id {
         case 1: "tmux_server_coding_app"
         case 2: "remote_coding_ios"
@@ -231,7 +237,7 @@ private struct SessionScope: Hashable {
 struct SentInput: Hashable {
     let sessionName: String
     let paneID: Int
-    let body: OpenAPI.SendInputRequest
+    let body: Components.Schemas.SendInputRequest
 }
 
 enum MockRepositoryError: Error {
@@ -247,7 +253,6 @@ private extension MockTmuxAgentRepository {
         "slug": "tmux-server-coding-app",
         "git_repo_url": "git@github.com:nick-buser/tmux-server-coding-app.git",
         "local_repo_path": "/Users/nickbuser/Projects/personal_coding/tmux_server_coding_app",
-        "tmux_session_name": "tmux_server_coding_app",
         "tagline": "Remote coding through managed tmux sessions",
         "description": "Backend and clients for managing projects, features, and tmux-backed coding sessions.",
         "accent": "indigo",
@@ -264,7 +269,6 @@ private extension MockTmuxAgentRepository {
         "slug": "remote-coding-ios",
         "git_repo_url": "git@github.com:nick-buser/remote-coding-io.git",
         "local_repo_path": "/Users/nickbuser/Projects/personal_coding/tmux_server_coding_app/ios_apps",
-        "tmux_session_name": null,
         "tagline": "Native mobile client for tmux-agent",
         "description": "SwiftUI client for project navigation, feature docs, and mobile terminal I/O.",
         "accent": "teal",
@@ -284,9 +288,14 @@ private extension MockTmuxAgentRepository {
         "id": 11,
         "project_id": 1,
         "branch_name": "service-0031",
+        "slug": "session-stream-and-pane-input",
         "title": "Session stream and pane input",
         "description_doc_key": "features/service-0031/description.md",
         "status": "in_progress",
+        "accent": "indigo",
+        "health": "ok",
+        "tags": [],
+        "progress_cached": 0.4,
         "created_at": "2026-04-29T14:00:00Z",
         "merged_at": null
       },
@@ -294,9 +303,14 @@ private extension MockTmuxAgentRepository {
         "id": 12,
         "project_id": 1,
         "branch_name": "docs-0032",
+        "slug": "mobile-client-planning",
         "title": "Mobile client planning",
         "description_doc_key": "features/docs-0032/description.md",
         "status": "in_progress",
+        "accent": "amber",
+        "health": "ok",
+        "tags": [],
+        "progress_cached": 0.2,
         "created_at": "2026-04-30T02:00:00Z",
         "merged_at": null
       },
@@ -304,9 +318,14 @@ private extension MockTmuxAgentRepository {
         "id": 21,
         "project_id": 2,
         "branch_name": "service-0001",
+        "slug": "project-hierarchy-prototype",
         "title": "Project hierarchy prototype",
         "description_doc_key": "features/service-0001/description.md",
         "status": "in_progress",
+        "accent": "teal",
+        "health": "ok",
+        "tags": [],
+        "progress_cached": 0.6,
         "created_at": "2026-04-30T05:30:00Z",
         "merged_at": null
       }

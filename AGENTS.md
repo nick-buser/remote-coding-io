@@ -146,11 +146,13 @@ Before opening a PR, run the iOS build + tests. The `/ios-gates` slash command i
 xcodebuild \
   -project remote-coding/remote-coding.xcodeproj \
   -scheme remote-coding \
-  -destination 'platform=iOS Simulator,name=iPhone 16' \
+  -destination 'platform=iOS Simulator,name=iPhone 17' \
+  -skipPackagePluginValidation \
+  -skipMacroValidation \
   build test
 ```
 
-If the project structure changes (new scheme, renamed target), update both this snippet and `.claude/commands/ios-gates.md` together.
+`-skipPackagePluginValidation` is required so the `OpenAPIGenerator` build-tool plugin runs headlessly. If the project structure changes (new scheme, renamed target, different bundled simulator generation), update both this snippet and `.claude/commands/ios-gates.md` together.
 
 ---
 

@@ -1,7 +1,7 @@
 ---
 prefix: docs
 title: Land the v2 design plan, ticket backlog, and supporting tooling
-status: active
+status: done
 branch: docs-0004
 ---
 

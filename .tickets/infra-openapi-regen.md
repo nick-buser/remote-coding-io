@@ -1,8 +1,8 @@
 ---
 prefix: infra
 title: Wire Swift OpenAPI Generator and replace hand-rolled types
-status: todo
-branch:
+status: active
+branch: infra-0001
 ---
 
 ## Description

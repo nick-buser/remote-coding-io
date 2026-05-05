@@ -1,0 +1,1947 @@
+openapi: 3.0.3
+info:
+  title: tmux-agent API
+  description: API for managing tmux sessions and tracking development features
+  version: 1.0.0
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+paths:
+  /healthz:
+    get:
+      operationId: getHealth
+      summary: Health check
+      tags: [System]
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /api/v1/sessions:
+    get:
+      operationId: listSessions
+      summary: List all tmux sessions
+      tags: [Sessions]
+      responses:
+        "200":
+          description: List of sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Session"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    post:
+      operationId: createSession
+      summary: Create a new tmux session
+      tags: [Sessions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSessionRequest"
+      responses:
+        "201":
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionCreatedResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/sessions/{name}:
+    delete:
+      operationId: killSession
+      summary: Kill a tmux session
+      tags: [Sessions]
+      parameters:
+        - $ref: "#/components/parameters/SessionName"
+      responses:
+        "204":
+          description: Session killed
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/sessions/{name}/panes:
+    get:
+      operationId: listPanes
+      summary: List panes in a session
+      tags: [Sessions]
+      parameters:
+        - $ref: "#/components/parameters/SessionName"
+      responses:
+        "200":
+          description: List of panes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Pane"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/sessions/{name}/panes/{paneId}/output:
+    get:
+      operationId: getPaneOutput
+      summary: Get output from a pane
+      tags: [Sessions]
+      parameters:
+        - $ref: "#/components/parameters/SessionName"
+        - $ref: "#/components/parameters/PaneId"
+      responses:
+        "200":
+          description: Pane output
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaneOutput"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/sessions/{name}/panes/{paneId}/input:
+    post:
+      operationId: sendPaneInput
+      summary: Send input to a pane
+      tags: [Sessions]
+      parameters:
+        - $ref: "#/components/parameters/SessionName"
+        - $ref: "#/components/parameters/PaneId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendInputRequest"
+      responses:
+        "200":
+          description: Input sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/ws/sessions/{name}/panes/{paneId}:
+    get:
+      operationId: streamPaneOutput
+      summary: Stream pane output via WebSocket
+      description: |
+        WebSocket endpoint for real-time pane output streaming.
+        
+        **Connection**: Upgrade HTTP to WebSocket using standard headers.
+        
+        **Server messages** (JSON):
+        ```json
+        {"content": "terminal output...", "timestamp": "2024-01-15T10:30:00Z"}
+        ```
+        
+        **Client messages** (JSON, optional):
+        ```json
+        {"resize": {"cols": 120, "rows": 40}}
+        ```
+        (resize is logged but not yet implemented)
+        
+        **Behavior**:
+        - Server pushes updates when pane content changes
+        - Adaptive polling: 100ms when active, 500ms when idle
+        - Multiple clients can subscribe to the same pane
+        - Connection closes when pane/session is killed
+      tags: [Sessions, WebSocket]
+      parameters:
+        - $ref: "#/components/parameters/SessionName"
+        - $ref: "#/components/parameters/PaneId"
+      responses:
+        "101":
+          description: Switching protocols to WebSocket
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/projects:
+    get:
+      operationId: listProjects
+      summary: List all projects
+      tags: [Projects]
+      responses:
+        "200":
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+    post:
+      operationId: createProject
+      summary: Create a new project
+      tags: [Projects]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectRequest"
+      responses:
+        "201":
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/projects/{idOrSlug}:
+    get:
+      operationId: getProject
+      summary: Get a project by ID or slug
+      tags: [Projects]
+      parameters:
+        - $ref: "#/components/parameters/ProjectIdentifier"
+      responses:
+        "200":
+          description: Project details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+    put:
+      operationId: updateProject
+      summary: Update a project
+      tags: [Projects]
+      parameters:
+        - $ref: "#/components/parameters/ProjectIdentifier"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProjectRequest"
+      responses:
+        "200":
+          description: Project updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+    delete:
+      operationId: deleteProject
+      summary: Delete a project
+      tags: [Projects]
+      parameters:
+        - $ref: "#/components/parameters/ProjectIdentifier"
+      responses:
+        "204":
+          description: Project deleted
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/projects/{idOrSlug}/session:
+    post:
+      operationId: openProjectSession
+      summary: Create or link a tmux session for a project
+      description: |
+        Creates a new tmux session for the project (using local_repo_path as
+        the working directory). The session name is project.name. If a session
+        with that name already exists, it is linked without being recreated.
+      tags: [Projects, Sessions]
+      parameters:
+        - $ref: "#/components/parameters/ProjectIdentifier"
+      responses:
+        "201":
+          description: Session created and linked to project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "200":
+          description: Session already existed and has been linked to project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/projects/{idOrSlug}/sessions:
+    get:
+      operationId: listProjectSessions
+      summary: List agent sessions for a project
+      description: |
+        Returns agent_sessions joined through the project's features. This is
+        the live-session strip shown in the PM hub sidebar and project detail.
+      tags: [AgentSessions]
+      parameters:
+        - $ref: "#/components/parameters/ProjectIdentifier"
+      responses:
+        "200":
+          description: List of agent sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentSession"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/tickets/{publicId}/sessions:
+    get:
+      operationId: listTicketSessions
+      summary: List agent sessions for a ticket
+      tags: [AgentSessions]
+      parameters:
+        - $ref: "#/components/parameters/TicketPublicId"
+      responses:
+        "200":
+          description: List of agent sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentSession"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/agent-sessions:
+    post:
+      operationId: createAgentSession
+      summary: Create an agent session bound to a ticket
+      description: |
+        Create a new agent_sessions row. `ticket_public_id` is required; the
+        server derives the branch name, opens the local git branch, and
+        creates a tmux session named `<project_slug>__<feature_slug>__<branch_slug>`
+        (or honours an explicit `tmux_session` override).
+      tags: [AgentSessions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAgentSessionRequest"
+      responses:
+        "201":
+          description: Agent session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentSession"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/projects/{idOrSlug}/features:
+    get:
+      operationId: listFeatures
+      summary: List features for a project
+      tags: [Features]
+      parameters:
+        - $ref: "#/components/parameters/ProjectIdentifier"
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/FeatureStatus"
+          description: Optional feature status filter
+      responses:
+        "200":
+          description: List of features
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Feature"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+    post:
+      operationId: createFeature
+      summary: Create a new feature
+      tags: [Features]
+      parameters:
+        - $ref: "#/components/parameters/ProjectIdentifier"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFeatureRequest"
+      responses:
+        "201":
+          description: Feature created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Feature"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/features/{id}:
+    get:
+      operationId: getFeature
+      summary: Get a feature by ID
+      tags: [Features]
+      parameters:
+        - $ref: "#/components/parameters/FeatureId"
+      responses:
+        "200":
+          description: Feature details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Feature"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+    put:
+      operationId: updateFeatureStatus
+      summary: Update feature status
+      tags: [Features]
+      parameters:
+        - $ref: "#/components/parameters/FeatureId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateFeatureStatusRequest"
+      responses:
+        "200":
+          description: Feature updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Feature"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/features/{id}/tickets:
+    get:
+      operationId: listTickets
+      summary: List tickets for a feature
+      tags: [Tickets]
+      parameters:
+        - $ref: "#/components/parameters/FeatureId"
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/TicketStatus"
+          description: Optional ticket status filter
+      responses:
+        "200":
+          description: List of tickets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Ticket"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+    post:
+      operationId: createTicket
+      summary: Create a ticket for a feature
+      tags: [Tickets]
+      parameters:
+        - $ref: "#/components/parameters/FeatureId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTicketRequest"
+      responses:
+        "201":
+          description: Ticket created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ticket"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/tickets/{publicId}:
+    get:
+      operationId: getTicket
+      summary: Get a ticket by public ID
+      tags: [Tickets]
+      parameters:
+        - $ref: "#/components/parameters/TicketPublicId"
+      responses:
+        "200":
+          description: Ticket details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ticket"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+    patch:
+      operationId: updateTicket
+      summary: Update ticket fields
+      tags: [Tickets]
+      parameters:
+        - $ref: "#/components/parameters/TicketPublicId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTicketRequest"
+      responses:
+        "200":
+          description: Ticket updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ticket"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/tickets/{publicId}/diff:
+    get:
+      operationId: getTicketDiff
+      summary: Per-file diff for a ticket's branch against the project's main
+      description: |
+        Returns the merge-base diff (`main...branch`) so the Review tab shows
+        only what landed on the branch since it diverged. Each entry carries
+        the before/after text MergeView consumes directly. Binary files come
+        back with `binary=true` and empty content.
+      tags: [Review]
+      parameters:
+        - $ref: "#/components/parameters/TicketPublicId"
+      responses:
+        "200":
+          description: Per-file diff
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketDiff"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/tickets/{publicId}/approve:
+    post:
+      operationId: approveTicket
+      summary: Approve a ticket — flips status to done and emits an activity event
+      tags: [Review]
+      parameters:
+        - $ref: "#/components/parameters/TicketPublicId"
+      responses:
+        "200":
+          description: Ticket after approval
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ticket"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/tickets/{publicId}/request-changes:
+    post:
+      operationId: requestTicketChanges
+      summary: Reviewer requests changes — keeps ticket in review, emits activity
+      tags: [Review]
+      parameters:
+        - $ref: "#/components/parameters/TicketPublicId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewActionRequest"
+      responses:
+        "200":
+          description: Ticket after requesting changes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ticket"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/tickets/{publicId}/send-back:
+    post:
+      operationId: sendTicketBack
+      summary: Send a ticket back to doing — review failed, more work needed
+      tags: [Review]
+      parameters:
+        - $ref: "#/components/parameters/TicketPublicId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewActionRequest"
+      responses:
+        "200":
+          description: Ticket after send-back
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ticket"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/tickets/{publicId}/criteria:
+    get:
+      operationId: listTicketCriteria
+      summary: List acceptance criteria for a ticket
+      tags: [Tickets]
+      parameters:
+        - $ref: "#/components/parameters/TicketPublicId"
+      responses:
+        "200":
+          description: List of acceptance criteria, ordered by sort_order
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AcceptanceCriterion"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+    post:
+      operationId: createTicketCriterion
+      summary: Append an acceptance criterion to a ticket
+      tags: [Tickets]
+      parameters:
+        - $ref: "#/components/parameters/TicketPublicId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAcceptanceCriterionRequest"
+      responses:
+        "201":
+          description: Criterion created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcceptanceCriterion"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/features/{id}/docs:
+    get:
+      operationId: listFeatureDocs
+      summary: List docs for a feature
+      tags: [Docs]
+      parameters:
+        - $ref: "#/components/parameters/FeatureId"
+      responses:
+        "200":
+          description: List of docs, pinned first then most-recently-updated
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Doc"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+    post:
+      operationId: createFeatureDoc
+      summary: Create a doc for a feature
+      tags: [Docs]
+      parameters:
+        - $ref: "#/components/parameters/FeatureId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDocRequest"
+      responses:
+        "201":
+          description: Doc created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Doc"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/docs/{id}:
+    get:
+      operationId: getDoc
+      summary: Get a doc by ID
+      tags: [Docs]
+      parameters:
+        - $ref: "#/components/parameters/DocId"
+      responses:
+        "200":
+          description: Doc details with body_blocks resolved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Doc"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+    patch:
+      operationId: updateDoc
+      summary: Update a doc (title, body_blocks, kind, pinned). Server recomputes word_count.
+      tags: [Docs]
+      parameters:
+        - $ref: "#/components/parameters/DocId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDocRequest"
+      responses:
+        "200":
+          description: Doc updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Doc"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+    delete:
+      operationId: deleteDoc
+      summary: Delete a doc
+      tags: [Docs]
+      parameters:
+        - $ref: "#/components/parameters/DocId"
+      responses:
+        "204":
+          description: Doc deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/criteria/{id}:
+    patch:
+      operationId: updateCriterion
+      summary: Update an acceptance criterion (text, done, sort_order)
+      tags: [Tickets]
+      parameters:
+        - $ref: "#/components/parameters/CriterionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAcceptanceCriterionRequest"
+      responses:
+        "200":
+          description: Criterion updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcceptanceCriterion"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+    delete:
+      operationId: deleteCriterion
+      summary: Delete an acceptance criterion
+      tags: [Tickets]
+      parameters:
+        - $ref: "#/components/parameters/CriterionId"
+      responses:
+        "204":
+          description: Criterion deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/features/{id}/decisions:
+    get:
+      operationId: listFeatureDecisions
+      summary: List decisions for a feature, newest first
+      tags: [Decisions]
+      parameters:
+        - $ref: "#/components/parameters/FeatureId"
+      responses:
+        "200":
+          description: List of decisions ordered by created_at DESC
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Decision"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+    post:
+      operationId: createFeatureDecision
+      summary: Append a decision to a feature
+      tags: [Decisions]
+      parameters:
+        - $ref: "#/components/parameters/FeatureId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDecisionRequest"
+      responses:
+        "201":
+          description: Decision created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Decision"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/decisions/{id}:
+    delete:
+      operationId: deleteDecision
+      summary: Delete a decision
+      tags: [Decisions]
+      parameters:
+        - $ref: "#/components/parameters/DecisionId"
+      responses:
+        "204":
+          description: Decision deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/activity:
+    get:
+      operationId: listActivity
+      summary: List activity events, newest first
+      description: |
+        Returns events scoped by project and/or feature, optionally filtered to
+        only those newer than `since`. The frontend polls this endpoint at 5s
+        intervals using the most recent `created_at` it has seen as the cursor.
+      tags: [Activity]
+      parameters:
+        - name: project
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Project numeric id or slug
+        - name: feature
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+          description: Feature ID
+        - name: since
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: RFC3339 cursor — only events strictly newer are returned
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+          description: Maximum events to return (default 100, max 500)
+      responses:
+        "200":
+          description: List of activity events ordered by created_at DESC
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityEvent"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+components:
+  parameters:
+    SessionName:
+      name: name
+      in: path
+      required: true
+      schema:
+        type: string
+      description: tmux session name
+
+    PaneId:
+      name: paneId
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: Pane index
+
+    ProjectIdentifier:
+      name: idOrSlug
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+      description: Project numeric ID or slug
+
+    FeatureId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+      description: Feature ID
+
+    TicketPublicId:
+      name: publicId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^TMX-[0-9]{4}$"
+      description: Ticket public ID
+
+    CriterionId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+      description: Acceptance criterion ID
+
+    DocId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+      description: Doc ID
+
+    DecisionId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+      description: Decision ID
+
+  schemas:
+    # Health
+    HealthResponse:
+      type: object
+      required: [status, tmux]
+      properties:
+        status:
+          type: string
+          example: ok
+        tmux:
+          type: object
+          required: [available, running]
+          properties:
+            available:
+              type: boolean
+            running:
+              type: boolean
+
+    # Sessions
+    Session:
+      type: object
+      required: [name, attached, created, windows, directory]
+      properties:
+        name:
+          type: string
+        attached:
+          type: boolean
+        created:
+          type: string
+          format: date-time
+        windows:
+          type: integer
+        directory:
+          type: string
+
+    Pane:
+      type: object
+      required: [index, title, width, height, active, directory]
+      properties:
+        index:
+          type: integer
+        title:
+          type: string
+        width:
+          type: integer
+        height:
+          type: integer
+        active:
+          type: boolean
+        directory:
+          type: string
+
+    PaneOutput:
+      type: object
+      required: [session_name, pane_index, content]
+      properties:
+        session_name:
+          type: string
+        pane_index:
+          type: integer
+        content:
+          type: string
+
+    CreateSessionRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        start_dir:
+          type: string
+
+    SendInputRequest:
+      type: object
+      description: |
+        Either `text` or `keys` (or both) must be non-empty. Order on the wire
+        to tmux: `text` first (typed as a single string, tmux interprets backslash
+        escapes inside it), then each entry of `keys` as a separate send-keys
+        argument, then `enter` (legacy shorthand for keys: ["Enter"]).
+      properties:
+        text:
+          type: string
+          description: Text to type into the pane. Optional.
+        keys:
+          type: array
+          items:
+            type: string
+          description: |
+            Special key names accepted by `tmux send-keys`. Examples: Enter,
+            Escape, Tab, BSpace, BTab, Up, Down, Left, Right, PageUp, PageDown,
+            Home, End, Insert, Delete, F1-F12, and the C-x / M-x modifier
+            forms (e.g. C-c for Ctrl-C, C-d for Ctrl-D).
+        enter:
+          type: boolean
+          default: false
+          description: Backwards-compat shorthand. Appends "Enter" to keys when true.
+
+    SessionCreatedResponse:
+      type: object
+      required: [name, status]
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+          example: created
+
+    StatusResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+
+    # WebSocket messages (for documentation - not code-generated)
+    PaneStreamMessage:
+      type: object
+      description: Server-to-client message for pane output streaming
+      required: [content, timestamp]
+      properties:
+        content:
+          type: string
+          description: Current pane output content
+        timestamp:
+          type: string
+          format: date-time
+          description: When the content was captured
+
+    PaneResizeRequest:
+      type: object
+      description: Client-to-server resize request (future use)
+      properties:
+        resize:
+          type: object
+          properties:
+            cols:
+              type: integer
+              description: Number of columns
+            rows:
+              type: integer
+              description: Number of rows
+
+    # Projects
+    ProjectStatus:
+      type: string
+      enum: [active, maintenance, paused]
+
+    Project:
+      type: object
+      required: [id, name, slug, local_repo_path, status, pinned, last_touched_at, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+          readOnly: true
+        name:
+          type: string
+        slug:
+          type: string
+        git_repo_url:
+          type: string
+        local_repo_path:
+          type: string
+        tagline:
+          type: string
+        description:
+          type: string
+        accent:
+          type: string
+        icon:
+          type: string
+        status:
+          $ref: "#/components/schemas/ProjectStatus"
+        pinned:
+          type: boolean
+        last_touched_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+
+    CreateProjectRequest:
+      type: object
+      required: [name, local_repo_path]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        slug:
+          type: string
+        git_repo_url:
+          type: string
+        local_repo_path:
+          type: string
+          minLength: 1
+        tagline:
+          type: string
+        description:
+          type: string
+        accent:
+          type: string
+        icon:
+          type: string
+        status:
+          $ref: "#/components/schemas/ProjectStatus"
+        pinned:
+          type: boolean
+
+    UpdateProjectRequest:
+      type: object
+      required: [name, local_repo_path]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        slug:
+          type: string
+        git_repo_url:
+          type: string
+        local_repo_path:
+          type: string
+          minLength: 1
+        tagline:
+          type: string
+        description:
+          type: string
+        accent:
+          type: string
+        icon:
+          type: string
+        status:
+          $ref: "#/components/schemas/ProjectStatus"
+        pinned:
+          type: boolean
+
+    # Features
+    Feature:
+      type: object
+      required: [id, project_id, slug, title, status, accent, health, tags, progress_cached, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+          readOnly: true
+        project_id:
+          type: integer
+          format: int64
+        branch_name:
+          type: string
+          nullable: true
+        slug:
+          type: string
+        title:
+          type: string
+        vision:
+          type: string
+        description_doc_key:
+          type: string
+        status:
+          $ref: "#/components/schemas/FeatureStatus"
+        accent:
+          type: string
+        milestone:
+          type: string
+        target_date:
+          type: string
+        health:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        pinned_doc:
+          type: string
+        progress_cached:
+          type: number
+          format: double
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        merged_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    FeatureStatus:
+      type: string
+      enum: [in_progress, review, planned, shipped, merged, abandoned]
+
+    CreateFeatureRequest:
+      type: object
+      required: [title]
+      properties:
+        branch_name:
+          type: string
+          minLength: 1
+          nullable: true
+        slug:
+          type: string
+        title:
+          type: string
+          minLength: 1
+        vision:
+          type: string
+        description_doc_key:
+          type: string
+        status:
+          $ref: "#/components/schemas/FeatureStatus"
+        accent:
+          type: string
+        milestone:
+          type: string
+        target_date:
+          type: string
+        health:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        pinned_doc:
+          type: string
+        progress_cached:
+          type: number
+          format: double
+
+    UpdateFeatureStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: "#/components/schemas/FeatureStatus"
+
+    # Tickets
+    TicketStatus:
+      type: string
+      enum: [todo, doing, review, done]
+      x-enum-varnames: [TicketStatusTodo, TicketStatusDoing, TicketStatusReview, TicketStatusDone]
+
+    Ticket:
+      type: object
+      required:
+        - id
+        - public_id
+        - feature_id
+        - title
+        - description
+        - status
+        - estimate
+        - branch_name
+        - criteria_total
+        - criteria_done
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: integer
+          format: int64
+          readOnly: true
+        public_id:
+          type: string
+          pattern: "^TMX-[0-9]{4}$"
+        feature_id:
+          type: integer
+          format: int64
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          $ref: "#/components/schemas/TicketStatus"
+        estimate:
+          type: string
+        branch_name:
+          type: string
+        criteria:
+          type: array
+          description: |
+            Full ordered list of acceptance criteria. Populated on the
+            single-ticket GET path; omitted from list responses (use
+            criteria_total / criteria_done for the count badges).
+          items:
+            $ref: "#/components/schemas/AcceptanceCriterion"
+        criteria_total:
+          type: integer
+          description: Total number of acceptance criteria attached to the ticket.
+        criteria_done:
+          type: integer
+          description: Number of acceptance criteria currently marked done.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+
+    AcceptanceCriterion:
+      type: object
+      required: [id, ticket_id, text, done, sort_order, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+          readOnly: true
+        ticket_id:
+          type: integer
+          format: int64
+        text:
+          type: string
+        done:
+          type: boolean
+        sort_order:
+          type: integer
+          description: Position within the ticket's checklist; ascending.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+
+    CreateAcceptanceCriterionRequest:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+          minLength: 1
+        done:
+          type: boolean
+        sort_order:
+          type: integer
+          description: Optional explicit position; appended to the end when omitted.
+
+    UpdateAcceptanceCriterionRequest:
+      type: object
+      properties:
+        text:
+          type: string
+          minLength: 1
+        done:
+          type: boolean
+        sort_order:
+          type: integer
+
+    DocKind:
+      type: string
+      enum: [vision, prd, design, notes, log, custom]
+
+    Doc:
+      type: object
+      required: [id, feature_id, kind, title, body_blocks, word_count, pinned, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+          readOnly: true
+        feature_id:
+          type: integer
+          format: int64
+        kind:
+          $ref: "#/components/schemas/DocKind"
+        title:
+          type: string
+        body_blocks:
+          type: string
+          description: TipTap block JSON. Stored verbatim; server treats it as opaque text.
+        object_key:
+          type: string
+          description: Reserved for the eventual Garage S3 migration; empty until then.
+        word_count:
+          type: integer
+          description: Recomputed on PATCH from body_blocks.
+        pinned:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+
+    CreateDocRequest:
+      type: object
+      required: [kind, title]
+      properties:
+        kind:
+          $ref: "#/components/schemas/DocKind"
+        title:
+          type: string
+          minLength: 1
+        body_blocks:
+          type: string
+          description: Optional initial TipTap block JSON; defaults to "[]" when omitted.
+        pinned:
+          type: boolean
+
+    UpdateDocRequest:
+      type: object
+      properties:
+        kind:
+          $ref: "#/components/schemas/DocKind"
+        title:
+          type: string
+          minLength: 1
+        body_blocks:
+          type: string
+        pinned:
+          type: boolean
+
+    DecisionActor:
+      type: string
+      enum: [human, agent]
+
+    Decision:
+      type: object
+      required: [id, feature_id, title, actor, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+          readOnly: true
+        feature_id:
+          type: integer
+          format: int64
+        title:
+          type: string
+        body:
+          type: string
+        actor:
+          $ref: "#/components/schemas/DecisionActor"
+        actor_name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+
+    CreateDecisionRequest:
+      type: object
+      required: [title, actor]
+      properties:
+        title:
+          type: string
+          minLength: 1
+        body:
+          type: string
+        actor:
+          $ref: "#/components/schemas/DecisionActor"
+        actor_name:
+          type: string
+
+    FileChange:
+      type: string
+      enum: [added, modified, deleted, renamed]
+
+    FileDiff:
+      type: object
+      required: [path, change, old_content, new_content]
+      properties:
+        path:
+          type: string
+        old_path:
+          type: string
+        change:
+          $ref: "#/components/schemas/FileChange"
+        binary:
+          type: boolean
+        old_content:
+          type: string
+        new_content:
+          type: string
+
+    TicketDiff:
+      type: object
+      required: [ticket_public_id, base, branch, files]
+      properties:
+        ticket_public_id:
+          type: string
+        base:
+          type: string
+          description: Base ref the diff was computed against (project's default branch)
+        branch:
+          type: string
+          description: Branch ref the diff was computed against
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/FileDiff"
+
+    ReviewActionRequest:
+      type: object
+      description: Optional reviewer comment carried in the activity event detail.
+      properties:
+        comment:
+          type: string
+
+    ActivityKind:
+      type: string
+      enum: [commit, check, review, doc, decision, question, test, approve]
+
+    ActivityActor:
+      type: string
+      enum: [human, agent]
+
+    ActivityEvent:
+      type: object
+      required: [id, actor, verb, kind, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+          readOnly: true
+        project_id:
+          type: integer
+          format: int64
+          nullable: true
+        feature_id:
+          type: integer
+          format: int64
+          nullable: true
+        ticket_id:
+          type: integer
+          format: int64
+          nullable: true
+        actor:
+          $ref: "#/components/schemas/ActivityActor"
+        actor_name:
+          type: string
+        verb:
+          type: string
+        kind:
+          $ref: "#/components/schemas/ActivityKind"
+        detail:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+
+    CreateTicketRequest:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        status:
+          $ref: "#/components/schemas/TicketStatus"
+        estimate:
+          type: string
+        branch_name:
+          type: string
+
+    UpdateTicketRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        status:
+          $ref: "#/components/schemas/TicketStatus"
+        estimate:
+          type: string
+
+    # Agent sessions
+    SessionState:
+      type: string
+      enum: [idle, active, awaiting-input, ended]
+
+    AgentSession:
+      type: object
+      required:
+        - id
+        - tmux_session
+        - state
+        - cpu
+        - start_time
+        - last_active_at
+        - created_at
+      properties:
+        id:
+          type: integer
+          format: int64
+          readOnly: true
+        ticket_id:
+          type: integer
+          format: int64
+          nullable: true
+        tmux_session:
+          type: string
+        state:
+          $ref: "#/components/schemas/SessionState"
+        pane:
+          type: string
+        cpu:
+          type: number
+          format: double
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+          nullable: true
+        last_active_at:
+          type: string
+          format: date-time
+        transcript_key:
+          type: string
+        token_usage:
+          type: string
+        cost_estimate:
+          type: number
+          format: double
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+
+    CreateAgentSessionRequest:
+      type: object
+      required: [ticket_public_id]
+      description: |
+        Spawn a session for a ticket. The server derives the ticket's
+        `branch_name` (per ADR 0002) if missing and persists it back. When the
+        project has a `local_repo_path`, a local git branch is created
+        (idempotent — no-op if already present). When tmux is available on
+        the host, a tmux session is started in `local_repo_path` with a
+        composed name of `<project_slug>__<feature_slug>__<branch_slug>`.
+        The composed name is also written to the new `agent_sessions` row.
+        An explicit `tmux_session` in the request is honoured verbatim.
+      properties:
+        ticket_public_id:
+          type: string
+          pattern: "^TMX-[0-9]{4}$"
+        tmux_session:
+          type: string
+          minLength: 1
+          description: |
+            Optional override; when omitted the server derives a composed name.
+        state:
+          $ref: "#/components/schemas/SessionState"
+        pane:
+          type: string
+        cpu:
+          type: number
+          format: double
+
+    # Errors (RFC 7807)
+    ProblemDetails:
+      type: object
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+          description: URI reference identifying the problem type
+        title:
+          type: string
+          description: Short human-readable summary
+        status:
+          type: integer
+          description: HTTP status code
+        detail:
+          type: string
+          description: Human-readable explanation specific to this occurrence
+        instance:
+          type: string
+          description: URI reference identifying the specific occurrence
+        request_id:
+          type: string
+          description: Request ID for tracing
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldError"
+          description: Field-level validation errors
+
+    FieldError:
+      type: object
+      required: [field, code, message]
+      properties:
+        field:
+          type: string
+          description: JSON path to the field with the error
+        code:
+          type: string
+          description: Machine-readable error code
+        message:
+          type: string
+          description: Human-readable error message
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+
+    Conflict:
+      description: Resource already exists
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+
+    ServiceUnavailable:
+      description: Store not configured
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+
+tags:
+  - name: System
+    description: Health and status endpoints
+  - name: Sessions
+    description: tmux session management
+  - name: WebSocket
+    description: Real-time streaming endpoints
+  - name: Projects
+    description: Project management
+  - name: Features
+    description: Feature/branch tracking
+  - name: Tickets
+    description: Tickets under a feature
+  - name: AgentSessions
+    description: Persistent agent session records (PM hub live sessions)
+  - name: Decisions
+    description: Append-only architectural decisions per feature
+  - name: Activity
+    description: Activity feed across workspace, project, and feature scopes
+  - name: Review
+    description: Ticket review — diff, approve, request changes, send back

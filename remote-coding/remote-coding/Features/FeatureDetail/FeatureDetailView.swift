@@ -13,7 +13,7 @@ struct FeatureDetailView: View {
     @State private var viewModel: FeatureDetailViewModel
     @State private var selectedSection: FeatureSection = .docs
 
-    init(project: OpenAPI.Project, feature: OpenAPI.Feature) {
+    init(project: Components.Schemas.Project, feature: Components.Schemas.Feature) {
         _viewModel = State(initialValue: FeatureDetailViewModel(project: project, feature: feature))
     }
 
@@ -23,7 +23,7 @@ struct FeatureDetailView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(viewModel.feature.title)
                         .font(.title3.bold())
-                    Text(viewModel.feature.branchName)
+                    Text(viewModel.feature.branchName ?? viewModel.feature.slug)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     LabeledContent("Status", value: viewModel.feature.status.rawValue)

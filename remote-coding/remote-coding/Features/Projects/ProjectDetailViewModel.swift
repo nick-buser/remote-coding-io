@@ -4,15 +4,15 @@ import Observation
 @MainActor
 @Observable
 final class ProjectDetailViewModel {
-    var project: OpenAPI.Project
-    var features: [OpenAPI.Feature] = []
+    var project: Components.Schemas.Project
+    var features: [Components.Schemas.Feature] = []
     var documents: [WorkspaceDocument] = []
-    var sessions: [OpenAPI.Session] = []
-    var panes: [String: [OpenAPI.Pane]] = [:]
+    var sessions: [Components.Schemas.Session] = []
+    var panes: [String: [Components.Schemas.Pane]] = [:]
     var isLoading = false
     var errorMessage: String?
 
-    init(project: OpenAPI.Project) {
+    init(project: Components.Schemas.Project) {
         self.project = project
     }
 
