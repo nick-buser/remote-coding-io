@@ -14,7 +14,7 @@ struct ProjectDetailView: View {
     @State private var viewModel: ProjectDetailViewModel
     @State private var selectedSection: ProjectSection = .overview
 
-    init(project: OpenAPI.Project) {
+    init(project: Components.Schemas.Project) {
         _viewModel = State(initialValue: ProjectDetailViewModel(project: project))
     }
 
@@ -73,7 +73,7 @@ struct ProjectDetailView: View {
                 Label("Open Session", systemImage: "terminal")
             }
         }
-        .navigationDestination(for: OpenAPI.Feature.self) { feature in
+        .navigationDestination(for: Components.Schemas.Feature.self) { feature in
             FeatureDetailView(project: viewModel.project, feature: feature)
         }
         .navigationDestination(for: WorkspaceDocument.self) { document in
@@ -85,7 +85,9 @@ struct ProjectDetailView: View {
         Section("Status") {
             LabeledContent("State", value: viewModel.project.status.rawValue)
             LabeledContent("Slug", value: viewModel.project.slug)
-            LabeledContent("Session", value: viewModel.project.tmuxSessionName ?? "None")
+            // The contract Project schema does not carry a tmux session
+            // name; that surface returns when service-repo-agent-sessions
+            // wires the listProjectSessions endpoint.
         }
     }
 
@@ -96,7 +98,7 @@ struct ProjectDetailView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(feature.title)
                             .font(.headline)
-                        Text(feature.branchName)
+                        Text(feature.branchName ?? feature.slug)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

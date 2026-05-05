@@ -28,7 +28,7 @@ final class AppModel {
         isUsingMockRepository = true
     }
 
-    func openTerminal(project: OpenAPI.Project, feature: OpenAPI.Feature?, session: OpenAPI.Session, pane: OpenAPI.Pane) {
+    func openTerminal(project: Components.Schemas.Project, feature: Components.Schemas.Feature?, session: Components.Schemas.Session, pane: Components.Schemas.Pane) {
         terminalContext = TerminalContext(project: project, feature: feature, session: session, pane: pane)
         selectedTab = .terminal
     }
@@ -55,8 +55,8 @@ struct TerminalContext: Identifiable, Hashable {
         "\(project.id)-\(feature?.id ?? 0)-\(session.name)-\(pane.index)"
     }
 
-    let project: OpenAPI.Project
-    let feature: OpenAPI.Feature?
-    let session: OpenAPI.Session
-    let pane: OpenAPI.Pane
+    let project: Components.Schemas.Project
+    let feature: Components.Schemas.Feature?
+    let session: Components.Schemas.Session
+    let pane: Components.Schemas.Pane
 }

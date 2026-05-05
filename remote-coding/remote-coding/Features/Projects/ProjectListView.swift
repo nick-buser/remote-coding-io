@@ -21,7 +21,7 @@ struct ProjectListView: View {
                 }
             }
             .navigationTitle("Projects")
-            .navigationDestination(for: OpenAPI.Project.self) { project in
+            .navigationDestination(for: Components.Schemas.Project.self) { project in
                 ProjectDetailView(project: project)
             }
             .task {
@@ -35,7 +35,7 @@ struct ProjectListView: View {
 }
 
 private struct ProjectRow: View {
-    let project: OpenAPI.Project
+    let project: Components.Schemas.Project
 
     var body: some View {
         HStack(spacing: 12) {

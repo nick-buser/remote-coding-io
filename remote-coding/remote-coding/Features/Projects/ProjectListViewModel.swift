@@ -4,7 +4,7 @@ import Observation
 @MainActor
 @Observable
 final class ProjectListViewModel {
-    var projects: [OpenAPI.Project] = []
+    var projects: [Components.Schemas.Project] = []
     var isLoading = false
     var errorMessage: String?
 

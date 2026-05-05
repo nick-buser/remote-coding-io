@@ -1,20 +1,20 @@
 import Foundation
 
 protocol TmuxAgentRepository {
-    func listProjects() async throws -> [OpenAPI.Project]
-    func getProject(idOrSlug: String) async throws -> OpenAPI.Project
-    func updateProject(idOrSlug: String, body: OpenAPI.UpdateProjectRequest) async throws -> OpenAPI.Project
-    func listFeatures(projectIDOrSlug: String) async throws -> [OpenAPI.Feature]
-    func getFeature(id: Int64) async throws -> OpenAPI.Feature
-    func updateFeatureStatus(id: Int64, body: OpenAPI.UpdateFeatureStatusRequest) async throws -> OpenAPI.Feature
+    func listProjects() async throws -> [Components.Schemas.Project]
+    func getProject(idOrSlug: String) async throws -> Components.Schemas.Project
+    func updateProject(idOrSlug: String, body: Components.Schemas.UpdateProjectRequest) async throws -> Components.Schemas.Project
+    func listFeatures(projectIDOrSlug: String) async throws -> [Components.Schemas.Feature]
+    func getFeature(id: Int64) async throws -> Components.Schemas.Feature
+    func updateFeatureStatus(id: Int64, body: Components.Schemas.UpdateFeatureStatusRequest) async throws -> Components.Schemas.Feature
     func listProjectDocuments(projectID: Int64) async throws -> [WorkspaceDocument]
     func listFeatureDocuments(featureID: Int64) async throws -> [WorkspaceDocument]
     func saveDocument(_ document: WorkspaceDocument) async throws -> WorkspaceDocument
-    func openProjectSession(idOrSlug: String) async throws -> OpenAPI.Project
-    func listSessions(projectID: Int64) async throws -> [OpenAPI.Session]
-    func listSessions(featureID: Int64) async throws -> [OpenAPI.Session]
-    func listSessions() async throws -> [OpenAPI.Session]
-    func listPanes(sessionName: String) async throws -> [OpenAPI.Pane]
-    func getPaneOutput(sessionName: String, paneID: Int) async throws -> OpenAPI.PaneOutput
-    func sendPaneInput(sessionName: String, paneID: Int, body: OpenAPI.SendInputRequest) async throws -> OpenAPI.StatusResponse
+    func openProjectSession(idOrSlug: String) async throws -> Components.Schemas.Project
+    func listSessions(projectID: Int64) async throws -> [Components.Schemas.Session]
+    func listSessions(featureID: Int64) async throws -> [Components.Schemas.Session]
+    func listSessions() async throws -> [Components.Schemas.Session]
+    func listPanes(sessionName: String) async throws -> [Components.Schemas.Pane]
+    func getPaneOutput(sessionName: String, paneID: Int) async throws -> Components.Schemas.PaneOutput
+    func sendPaneInput(sessionName: String, paneID: Int, body: Components.Schemas.SendInputRequest) async throws -> Components.Schemas.StatusResponse
 }

@@ -9,7 +9,7 @@ final class TerminalViewModel {
     var input = ""
     var isLoading = false
     var errorMessage: String?
-    var lastSentRequest: OpenAPI.SendInputRequest?
+    var lastSentRequest: Components.Schemas.SendInputRequest?
 
     func configure(context: TerminalContext?, repository: TmuxAgentRepository) async {
         guard self.context != context else {
@@ -36,7 +36,7 @@ final class TerminalViewModel {
     }
 
     func submit(repository: TmuxAgentRepository) async {
-        await send(OpenAPI.SendInputRequest.text(input, submit: true), repository: repository)
+        await send(.text(input, submit: true), repository: repository)
         input = ""
     }
 
@@ -48,7 +48,7 @@ final class TerminalViewModel {
         await send(.key(key), repository: repository)
     }
 
-    private func send(_ request: OpenAPI.SendInputRequest, repository: TmuxAgentRepository) async {
+    private func send(_ request: Components.Schemas.SendInputRequest, repository: TmuxAgentRepository) async {
         guard let context else {
             return
         }
@@ -64,3 +64,16 @@ final class TerminalViewModel {
     }
 }
 
+extension Components.Schemas.SendInputRequest {
+    static func text(_ value: String, submit: Bool) -> Self {
+        Self(text: value, keys: nil, enter: submit)
+    }
+
+    static func key(_ value: String) -> Self {
+        Self(text: nil, keys: [value], enter: nil)
+    }
+
+    static func enterOnly() -> Self {
+        Self(text: nil, keys: ["Enter"], enter: nil)
+    }
+}
