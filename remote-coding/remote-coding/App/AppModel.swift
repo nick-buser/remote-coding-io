@@ -18,7 +18,7 @@ final class AppModel {
 
     init(apiConfiguration: APIConfiguration = APIConfigurationStore.load()) {
         self.apiConfiguration = apiConfiguration
-        repository = LiveTmuxAgentRepository(client: APIClient(configuration: apiConfiguration))
+        repository = LiveTmuxAgentRepository(configuration: apiConfiguration)
         isUsingMockRepository = false
     }
 
@@ -37,7 +37,7 @@ final class AppModel {
         let configuration = try APIConfiguration(baseURLString: rawValue)
         APIConfigurationStore.save(configuration)
         apiConfiguration = configuration
-        repository = LiveTmuxAgentRepository(client: APIClient(configuration: configuration))
+        repository = LiveTmuxAgentRepository(configuration: configuration)
         isUsingMockRepository = false
     }
 
@@ -45,7 +45,7 @@ final class AppModel {
         let configuration = APIConfiguration.default
         APIConfigurationStore.save(configuration)
         apiConfiguration = configuration
-        repository = LiveTmuxAgentRepository(client: APIClient(configuration: configuration))
+        repository = LiveTmuxAgentRepository(configuration: configuration)
         isUsingMockRepository = false
     }
 }
