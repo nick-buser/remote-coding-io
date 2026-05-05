@@ -1,7 +1,7 @@
 ---
 prefix: infra
 title: Add Theme module — colors, typography, spacing, radius, accents
-status: active
+status: done
 branch: infra-0002
 ---
 
