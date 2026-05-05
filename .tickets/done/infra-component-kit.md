@@ -1,7 +1,7 @@
 ---
 prefix: infra
 title: Build shared UI component kit — primitives every screen reuses
-status: active
+status: done
 branch: infra-0003
 ---
 
