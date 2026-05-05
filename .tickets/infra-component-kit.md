@@ -15,31 +15,31 @@ See `docs/feature_plans/10-design-system.md` for component inventory and visual 
 
 ## Acceptance criteria
 
-- [ ] `Core/Components/Pip.swift` — `Pip(accent:size:radius:)` view; renders a filled rounded square. Defaults: 8pt, r:3.
-- [ ] `Core/Components/StatusGlyph.swift` — `StatusGlyph(status:size:)`. Status maps:
+- [x] `Core/Components/Pip.swift` — `Pip(accent:size:radius:)` view; renders a filled rounded square. Defaults: 8pt, r:3.
+- [x] `Core/Components/StatusGlyph.swift` — `StatusGlyph(status:size:)`. Status maps:
   - `.shipped` / `.done` → solid green disc with white ✓.
   - `.review` → iris ring with iris-tinted fill (40% alpha).
   - `.doing` / `.inProgress` → orange ring with conic-gradient (60% sweep).
   - `.planned` → dashed muted ring.
   - `.todo` → solid muted ring, empty.
   Accepts both `TicketStatus` and `FeatureStatus` (use a small `StatusGlyphRole` enum to avoid coupling).
-- [ ] `Core/Components/RoundedCard.swift` — `RoundedCard(radius:padding:)`. Light: white bg, no border, 4% shadow. Dark: card bg, 0.5pt hairline.
-- [ ] `Core/Components/MetaPill.swift` — `MetaPill(icon: String?, iconColor: Color?, label: String)` inline label with optional leading dot.
-- [ ] `Core/Components/PillButton.swift` — `PillButton(role:accent:wide:action:)`. Roles: `.primary`, `.secondary`, `.ghost`. Wide grows in HStack.
-- [ ] `Core/Components/SegmentedControl.swift` — `SegmentedControl(items:selection:)` matching Apple-style chip-tinted track + white pill active item.
-- [ ] `Core/Components/ScrollChips.swift` and `Chip` — horizontal scrolling filter chip row. Per-chip: label, optional count (mono trailing), optional dot (accent leading), `active` state.
-- [ ] `Core/Components/BackChevron.swift` — `BackChevron(label:accent:)` for the leading slot of `QuietHeader`.
-- [ ] `Core/Components/NavIconButton.swift` — `NavIconButton(name:accent:tinted:)`. Names: `.plus`, `.search`, `.filter`, `.calendar`, `.dots`, `.share`, `.compose`. Tinted variant uses the accent.
-- [ ] `Core/Components/Chevron.swift` — trailing 7×12 disclosure indicator.
-- [ ] `Core/Components/EmptyState.swift` — `EmptyState(systemImage:title:body:)`. 72pt outlined circle + glyph, 22pt title, 14pt body, centered.
-- [ ] `Core/Components/ProgressBar.swift` — `ProgressBar(value:accent:height:)`; defaults to 4pt.
-- [ ] `Core/Components/Header/QuietHeader.swift` — replaces the design's `QuietHeader`: leading slot, centered label, trailing slot, large optional title, subtitle.
-- [ ] `Core/Components/Header/LargeTitleHeader.swift` — replaces the design's `NavHeader` for top-level tabs that show a 34pt large title.
-- [ ] `Core/Components/KindIcon.swift` and `KindDot.swift` — colored 32pt rounded square with kind glyph (Inbox rows) and 8pt rounded-2pt dot (activity feed).
-- [ ] `Core/Components/AccentSwatchPicker.swift` — five accent circles with selected ring; binds to a `@Binding<AccentColor>`.
-- [ ] Each component has at least one `#Preview` covering the variants in light and dark.
-- [ ] Snapshot tests (or rendered previews + golden images) for `Pip`, `StatusGlyph`, `MetaPill`, `Chip`, `SegmentedControl`, `KindIcon` ensure visual regressions are caught.
-- [ ] Project builds and the existing screens compile (they don't have to use the new components yet — the screen tickets will swap them in).
+- [x] `Core/Components/RoundedCard.swift` — `RoundedCard(radius:padding:)`. Light: white bg, no border, 4% shadow. Dark: card bg, 0.5pt hairline.
+- [x] `Core/Components/MetaPill.swift` — `MetaPill(icon: String?, iconColor: Color?, label: String)` inline label with optional leading dot.
+- [x] `Core/Components/PillButton.swift` — `PillButton(role:accent:wide:action:)`. Roles: `.primary`, `.secondary`, `.ghost`. Wide grows in HStack.
+- [x] `Core/Components/SegmentedControl.swift` — `SegmentedControl(items:selection:)` matching Apple-style chip-tinted track + white pill active item.
+- [x] `Core/Components/ScrollChips.swift` and `Chip` — horizontal scrolling filter chip row. Per-chip: label, optional count (mono trailing), optional dot (accent leading), `active` state.
+- [x] `Core/Components/BackChevron.swift` — `BackChevron(label:accent:)` for the leading slot of `QuietHeader`.
+- [x] `Core/Components/NavIconButton.swift` — `NavIconButton(name:accent:tinted:)`. Names: `.plus`, `.search`, `.filter`, `.calendar`, `.dots`, `.share`, `.compose`. Tinted variant uses the accent.
+- [x] `Core/Components/Chevron.swift` — trailing 7×12 disclosure indicator.
+- [x] `Core/Components/EmptyState.swift` — `EmptyState(systemImage:title:body:)`. 72pt outlined circle + glyph, 22pt title, 14pt body, centered.
+- [x] `Core/Components/ProgressBar.swift` — `ProgressBar(value:accent:height:)`; defaults to 4pt.
+- [x] `Core/Components/Header/QuietHeader.swift` — replaces the design's `QuietHeader`: leading slot, centered label, trailing slot, large optional title, subtitle.
+- [x] `Core/Components/Header/LargeTitleHeader.swift` — replaces the design's `NavHeader` for top-level tabs that show a 34pt large title.
+- [x] `Core/Components/KindIcon.swift` and `KindDot.swift` — colored 32pt rounded square with kind glyph (Inbox rows) and 8pt rounded-2pt dot (activity feed).
+- [x] `Core/Components/AccentSwatchPicker.swift` — five accent circles with selected ring; binds to a `@Binding<AccentColor>`.
+- [x] Each component has at least one `#Preview` covering the variants in light and dark.
+- [x] Snapshot tests (or rendered previews + golden images) for `Pip`, `StatusGlyph`, `MetaPill`, `Chip`, `SegmentedControl`, `KindIcon` ensure visual regressions are caught.
+- [x] Project builds and the existing screens compile (they don't have to use the new components yet — the screen tickets will swap them in).
 
 ## Notes
 
