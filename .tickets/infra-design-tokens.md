@@ -1,8 +1,8 @@
 ---
 prefix: infra
 title: Add Theme module — colors, typography, spacing, radius, accents
-status: todo
-branch:
+status: active
+branch: infra-0002
 ---
 
 ## Description
@@ -13,18 +13,18 @@ See `docs/feature_plans/10-design-system.md` for the full token list. Concrete v
 
 ## Acceptance criteria
 
-- [ ] `Core/Theme/Surface.swift` exposes light + dark surface tokens: `bg`, `card`, `sep`, `chip`, `tabBg`, `tabBd`, `homeBar`, `terminalBg`, `terminalChrome`, `terminalInput`. Each is reachable as `Theme.Surface.bg(scheme)` (or similar) and resolves through `ColorScheme`.
-- [ ] `Core/Theme/Text.swift` exposes `fg(scheme)`, `fg2(scheme)`, `fg3(scheme)` matching the design's three text levels in light + dark.
-- [ ] `Core/Theme/Accent.swift` defines an `enum AccentColor` with cases `iris`, `amber`, `mint`, `rose`, `slate`, plus a `value(for: ColorScheme)` returning the oklch values from the design (light + dark variants per accent).
-- [ ] `Core/Theme/Semantic.swift` defines `green`, `orange`, `red`, `yellow` constants with the values from the design (e.g., `green = Color(red: 52/255, green: 199/255, blue: 89/255)`).
-- [ ] `Core/Theme/Typography.swift` provides view modifiers `.themeTitle()`, `.themeDisplayLarge()`, `.themeDisplayMedium()`, `.themeBody()`, `.themeCaption()`, `.themeMono(_ size: CGFloat)`, `.themeMonoSm()` matching the design type scale.
-- [ ] `Core/Theme/Spacing.swift` exposes named constants `s1...s6` matching the spacing scale in the design plan.
-- [ ] `Core/Theme/Radius.swift` exposes named constants `r1...r8` matching the radius scale in the design plan.
-- [ ] `Core/Theme/Theme.swift` re-exports the above as `Theme.Surface.bg`, `Theme.Accent.iris`, `Theme.Spacing.s4`, `Theme.Radius.r5`, etc. so any view can `import` once.
-- [ ] An `EnvironmentValues` extension exposes the current accent: `@Environment(\.accent)` returns an `AccentColor`. Set by the root coordinator from the user's stored preference (default `.iris`).
-- [ ] A unit test verifies the accent's oklch hex conversion produces a non-nil `Color` for every case in both `ColorScheme` modes.
-- [ ] No view in the existing app hard-codes a hex color or font size — search-and-replace shows only `Theme.*` references in views (existing prototype views OK to leave untouched until they're rewritten in screen tickets).
-- [ ] Project builds and existing previews render.
+- [x] `Core/Theme/Surface.swift` exposes light + dark surface tokens: `bg`, `card`, `sep`, `chip`, `tabBg`, `tabBd`, `homeBar`, `terminalBg`, `terminalChrome`, `terminalInput`. Each is reachable as `Theme.Surface.bg(scheme)` (or similar) and resolves through `ColorScheme`.
+- [x] `Core/Theme/Text.swift` exposes `fg(scheme)`, `fg2(scheme)`, `fg3(scheme)` matching the design's three text levels in light + dark.
+- [x] `Core/Theme/Accent.swift` defines an `enum AccentColor` with cases `iris`, `amber`, `mint`, `rose`, `slate`, plus a `value(for: ColorScheme)` returning the oklch values from the design (light + dark variants per accent).
+- [x] `Core/Theme/Semantic.swift` defines `green`, `orange`, `red`, `yellow` constants with the values from the design (e.g., `green = Color(red: 52/255, green: 199/255, blue: 89/255)`).
+- [x] `Core/Theme/Typography.swift` provides view modifiers `.themeTitle()`, `.themeDisplayLarge()`, `.themeDisplayMedium()`, `.themeBody()`, `.themeCaption()`, `.themeMono(_ size: CGFloat)`, `.themeMonoSm()` matching the design type scale.
+- [x] `Core/Theme/Spacing.swift` exposes named constants `s1...s6` matching the spacing scale in the design plan.
+- [x] `Core/Theme/Radius.swift` exposes named constants `r1...r8` matching the radius scale in the design plan.
+- [x] `Core/Theme/Theme.swift` re-exports the above as `Theme.Surface.bg`, `Theme.Accent.iris`, `Theme.Spacing.s4`, `Theme.Radius.r5`, etc. so any view can `import` once.
+- [x] An `EnvironmentValues` extension exposes the current accent: `@Environment(\.accent)` returns an `AccentColor`. Set by the root coordinator from the user's stored preference (default `.iris`).
+- [x] A unit test verifies the accent's oklch hex conversion produces a non-nil `Color` for every case in both `ColorScheme` modes.
+- [x] No view in the existing app hard-codes a hex color or font size — search-and-replace shows only `Theme.*` references in views (existing prototype views OK to leave untouched until they're rewritten in screen tickets).
+- [x] Project builds and existing previews render.
 
 ## Notes
 

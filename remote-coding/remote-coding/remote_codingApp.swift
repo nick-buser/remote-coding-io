@@ -15,6 +15,7 @@ struct remote_codingApp: App {
         WindowGroup {
             ContentView()
                 .environment(appModel)
+                .environment(\.accent, appModel.accent)
         }
     }
 }

@@ -15,6 +15,11 @@ final class AppModel {
     var terminalContext: TerminalContext?
     var apiConfiguration: APIConfiguration
     var isUsingMockRepository: Bool
+    /// User-selected accent. Persistence + UI for changing this lands
+    /// with `service-you-screen`; for now the value is held in memory
+    /// and propagates through `\.accent` so theme tokens and components
+    /// can read it from any view.
+    var accent: AccentColor = .iris
 
     init(apiConfiguration: APIConfiguration = APIConfigurationStore.load()) {
         self.apiConfiguration = apiConfiguration
