@@ -38,9 +38,13 @@ final class APIClient {
     private func request<Response: Decodable>(path: String, method: String, bodyData: Data?) async throws -> Response {
         let responseData = try await data(path: path, method: method, bodyData: bodyData)
         guard !responseData.isEmpty else {
-            throw APIClientError.emptyResponse
+            throw RepositoryError.unsupported("The server returned an empty response.")
         }
-        return try decoder.decode(Response.self, from: responseData)
+        do {
+            return try decoder.decode(Response.self, from: responseData)
+        } catch {
+            throw RepositoryError.decoding(error)
+        }
     }
 
     private func data(path: String, method: String, bodyData: Data?) async throws -> Data {
@@ -53,40 +57,23 @@ final class APIClient {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
 
-        let (data, response) = try await session.data(for: request)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch let urlError as URLError {
+            throw RepositoryError.network(urlError)
+        }
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw APIClientError.invalidResponse
+            throw RepositoryError.unsupported("The server returned a non-HTTP response.")
         }
         guard (200..<300).contains(httpResponse.statusCode) else {
-            if let problem = try? decoder.decode(OpenAPI.ProblemDetails.self, from: data) {
-                throw APIClientError.problem(problem)
+            if let problem = try? decoder.decode(Components.Schemas.ProblemDetails.self, from: data) {
+                throw RepositoryError.problem(problem)
             }
-            throw APIClientError.httpStatus(httpResponse.statusCode)
+            throw RepositoryError.http(httpResponse.statusCode)
         }
         return data
-    }
-}
-
-enum APIClientError: LocalizedError {
-    case emptyResponse
-    case httpStatus(Int)
-    case invalidResponse
-    case problem(OpenAPI.ProblemDetails)
-    case unsupported(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .emptyResponse:
-            "The server returned an empty response."
-        case .httpStatus(let status):
-            "The server returned HTTP \(status)."
-        case .invalidResponse:
-            "The server returned an invalid response."
-        case .problem(let problem):
-            problem.detail ?? problem.title
-        case .unsupported(let message):
-            message
-        }
     }
 }
 

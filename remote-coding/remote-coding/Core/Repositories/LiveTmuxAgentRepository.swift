@@ -40,7 +40,7 @@ final class LiveTmuxAgentRepository: TmuxAgentRepository {
     }
 
     func saveDocument(_ document: WorkspaceDocument) async throws -> WorkspaceDocument {
-        throw APIClientError.unsupported("Document persistence is not exposed by the backend API yet.")
+        throw RepositoryError.unsupported("Document persistence is not exposed by the backend API yet.")
     }
 
     func openProjectSession(idOrSlug: String) async throws -> OpenAPI.Project {
