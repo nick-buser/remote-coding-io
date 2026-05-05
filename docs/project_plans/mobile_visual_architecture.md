@@ -2,6 +2,13 @@
 
 Date: 2026-04-30
 
+> **Superseded by `docs/feature_plans/` for the v2 design.** This document
+> predates the Claude Design v2 bundle (5-tab shell, terminal as full-screen
+> drill-down, Project ▸ Feature ▸ Ticket ▸ Agent Session hierarchy) and the
+> richer OpenAPI surface that landed alongside it. Kept for historical
+> context. Read `docs/feature_plans/00-overview.md` first for the current
+> plan.
+
 ## Purpose
 
 The iOS app should not reproduce the web app in a smaller viewport. The mobile experience needs the same core affordances, but arranged around native navigation, fast context switching, deliberate text entry, and review surfaces that make sense in one hand.

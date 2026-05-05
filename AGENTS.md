@@ -14,32 +14,76 @@ Native iOS client for the `tmux-agent` backend. The app exists because the mobil
 
 ### Product Shape
 
-The primary workflow is hierarchical and project-centered:
+The v2 design (see `docs/feature_plans/00-overview.md`) reframes the app
+around a 5-tab bottom shell — Inbox, Projects, Roadmap, Sessions, You — and
+treats the terminal as a full-screen drill-down rather than a top-level tab.
+The information hierarchy is:
 
 ```text
 Project
 └── Feature
-    └── Session
-        └── Pane text stream + input
+    ├── Tickets
+    │   └── Agent Session(s) (terminal pane)
+    ├── Docs (PRD, design, notes, log, custom)
+    └── Decisions (append-only)
 ```
 
-The project and feature areas should feel like a mobile file browser: drill into projects, then features, then the active coding sessions for that work. Feature detail screens should have dedicated tabs for descriptions, planning notes, status, and related sessions as those backend resources become available.
+`ActivityEvent` records cross-cut the hierarchy and feed the Inbox. `AgentSession`
+is a persistent record (state, uptime, transcript key) bound to a ticket; the
+raw tmux `Session` / `Pane` surface remains for transport.
 
-The text view is a first-class tab, not a hidden detail view. It must always be reachable from the app shell, but the selected text surface is scoped to an explicit project, feature, session, and pane. Avoid global anonymous terminal screens.
+Drill-down should feel like a mobile file browser: Projects → Project →
+Feature → Tickets / Docs / Decisions / Sessions. The terminal is reachable
+from a Sessions row, an Inbox `Open pane` action, or a feature's Sessions
+sub-tab — when it is presented the tab bar is hidden. The selected
+terminal surface is always scoped to an explicit project, feature, session,
+and pane; never a global anonymous terminal.
 
 ### Current Focus
 
-Build the minimum useful native app:
+The app is being rebuilt against the v2 design across five phases (see
+`docs/feature_plans/00-overview.md`). The current scope is:
 
-- List, create, view, edit, and delete projects.
-- List and create features under a project.
-- Open or link a project tmux session through the backend.
-- List sessions and panes.
-- Stream pane output over WebSocket.
-- Send text and special-key input to a pane.
-- Render the pane text cleanly on mobile with Runestone.
+- Phase 0 — foundation: OpenAPI generator, theme tokens, shared component kit.
+- Phase 1 — navigation: 5-tab shell, typed `AppRoute`, root coordinator.
+- Phase 2 — repositories: Tickets, Acceptance Criteria, Docs, Decisions,
+  Activity, Agent Sessions, Review (each end-to-end with Live + Mock + tests).
+- Phase 3 — screens: Inbox, Projects list / detail, Feature detail tabs
+  (Tickets, PRD, Decisions, Sessions), Roadmap, Sessions, Review, You.
+- Phase 4 — terminal: dark chrome, pane switcher, renderer boundary, quick
+  keys, input row, real WebSocket transport, then Runestone.
+- Phase 5 — polish: ANSI parsing, empty states, mock fixture rebuild.
 
-Tickets are part of the planned backend hierarchy, but the current OpenAPI contract does not expose ticket endpoints yet. Do not invent local ticket DTOs or API calls before the contract exists.
+The OpenAPI contract already exposes Tickets, Acceptance Criteria, Docs,
+Decisions, Activity, Agent Sessions, and Review (diff / approve / request /
+send-back). All app work flows through generated types — do not handwrite
+DTOs that duplicate `../api/openapi.yaml`.
+
+---
+
+## v2 design reference
+
+The v2 design and ticket plan live alongside the code:
+
+- `claude_design_references/remote-coding-platform/README.md` — Claude Design
+  bundle: `iOS App v2.html` artboards, `ios-screens-zen.jsx` (source-of-truth
+  per-screen JSX), `ios-frame.jsx` (device chrome / liquid-glass pill),
+  `styles.css` and inline tokens, `data.jsx` mock fixtures.
+- `docs/feature_plans/00-overview.md` — phase plan, ticket sequencing,
+  information hierarchy, dependency graph. Read first.
+- `docs/feature_plans/10-design-system.md` — tokens, accents, typography,
+  component inventory.
+- `docs/feature_plans/20-navigation-and-data.md` — tab shell, typed routes,
+  repository protocol expansion.
+- `docs/feature_plans/30-screens.md` — per-screen detail and component
+  composition.
+- `docs/feature_plans/40-terminal.md` — terminal transport, rendering,
+  ergonomics.
+
+The earlier `docs/project_plans/mobile_gap_analysis.md` and
+`mobile_visual_architecture.md` predate the v2 design. They are kept for
+historical context but are superseded by the documents in
+`docs/feature_plans/`.
 
 ---
 
@@ -177,15 +221,39 @@ Views should not import generated OpenAPI types directly. Convert generated DTOs
 
 ### Navigation
 
-Use a root coordinator with typed routes:
+The bottom tab bar has **five** tabs in this order:
 
-- `projectList`
+| # | Tab | What it shows |
+|---|-----|---------------|
+| 1 | **Inbox** | Activity feed scoped to "needs you" — questions, reviews, decisions, mentions. |
+| 2 | **Projects** | Pinned + all projects, drill-down to project / feature / ticket. |
+| 3 | **Roadmap** | Milestone timeline with features grouped by milestone. |
+| 4 | **Sessions** | Agent sessions, grouped by state (awaiting / active / idle). |
+| 5 | **You** | Profile, workspace, accent, agent settings. |
+
+The terminal is **not** a top-level tab. It is a full-screen drill-down
+reached from a Sessions row, an Inbox `Open pane` action, or a feature's
+Sessions sub-tab. When the terminal is visible the tab bar is hidden — it
+brings its own dark chrome and home-bar handling.
+
+Use a root coordinator with typed routes. The set the v2 plan calls for
+(see `docs/feature_plans/20-navigation-and-data.md`):
+
+- `inbox`, `projects`, `roadmap`, `sessions`, `you` — top-level tab roots
 - `projectDetail(projectIDOrSlug)`
 - `featureDetail(featureID)`
-- `sessionDetail(sessionName, projectID, featureID?)`
-- `paneText(projectID, featureID?, sessionName, paneID)`
+- `ticketDetail(publicID:)`
+- `docDetail(docID:)`
+- `agentSession(sessionID:)` — full-screen terminal for one agent session
+- `review(ticketPublicID:)` — diff + checklist surface
+- `sessionDetail(sessionName, projectID, featureID?)` — raw tmux session
+  (kept for parity with the existing repository surface; the v2 routes
+  prefer `agentSession`)
 
-Project and feature navigation should behave like a folder hierarchy. The text tab should restore the last selected project/feature/session/pane, but it must make that context visible and changeable.
+Project, feature, and ticket navigation should behave like a folder
+hierarchy. The terminal route should restore the last-selected project /
+feature / ticket / agent session, but it must make that context visible
+and changeable in the slim context bar at the top of the surface.
 
 ---
 
@@ -202,17 +270,29 @@ remote-coding/
     AppRoute.swift                 # Typed navigation routes
 
   Features/
+    Inbox/
+      Views/                       # Activity feed grouped by Needs you / Earlier
+      ViewModels/
     Projects/
-      Views/
+      Views/                       # Projects list + ProjectDetail
       ViewModels/
     FeatureDetail/
-      Views/                       # Description, status, sessions tabs
+      Views/                       # Tickets / PRD / Decisions / Sessions sub-tabs
+      ViewModels/
+    Roadmap/
+      Views/                       # Milestone timeline with page-dot navigation
       ViewModels/
     Sessions/
-      Views/                       # Session and pane lists
+      Views/                       # Agent sessions list, awaiting-you hero card
+      ViewModels/
+    Review/
+      Views/                       # Ticket diff + approve / request changes / send back
+      ViewModels/
+    You/
+      Views/                       # Profile + Workspace / Appearance / Agent settings
       ViewModels/
     Terminal/
-      Views/                       # Runestone text surface and input controls
+      Views/                       # Full-screen drill-down: Runestone surface, quick keys, input
       ViewModels/
 
   Core/
@@ -267,27 +347,43 @@ The iOS app must use `../api/openapi.yaml` as the exclusive HTTP API contract.
 
 ### Type Generation
 
-Use Swift OpenAPI Generator for HTTP client and schema types. The expected generated surface should cover:
+Use Swift OpenAPI Generator for HTTP client and schema types. The
+generated surface (under `Components.Schemas.*`) covers:
 
-- `HealthResponse`
-- `Session`
-- `Pane`
-- `PaneOutput`
-- `CreateSessionRequest`
-- `SendInputRequest`
-- `Project`
-- `CreateProjectRequest`
-- `UpdateProjectRequest`
-- `Feature`
-- `CreateFeatureRequest`
-- `UpdateFeatureStatusRequest`
-- `ProblemDetails`
+- System: `HealthResponse`, `StatusResponse`, `ProblemDetails`,
+  `FieldError`.
+- Projects: `Project`, `ProjectStatus`, `CreateProjectRequest`,
+  `UpdateProjectRequest`.
+- Features: `Feature`, `FeatureStatus`, `CreateFeatureRequest`,
+  `UpdateFeatureStatusRequest`.
+- Tickets: `Ticket`, `TicketStatus`, `CreateTicketRequest`,
+  `UpdateTicketRequest`.
+- Acceptance Criteria: `AcceptanceCriterion`,
+  `CreateAcceptanceCriterionRequest`,
+  `UpdateAcceptanceCriterionRequest`.
+- Docs: `Doc`, `DocKind`, `CreateDocRequest`, `UpdateDocRequest`.
+- Decisions: `Decision`, `DecisionActor`, `CreateDecisionRequest`.
+- Activity: `ActivityEvent`, `ActivityKind`, `ActivityActor`.
+- Agent Sessions: `AgentSession`, `SessionState`,
+  `CreateAgentSessionRequest`.
+- Review: `TicketDiff`, `FileDiff`, `FileChange`, `ReviewActionRequest`.
+- Raw tmux surface: `Session`, `Pane`, `PaneOutput`,
+  `CreateSessionRequest`, `SessionCreatedResponse`, `SendInputRequest`,
+  `PaneStreamMessage`, `PaneResizeRequest`.
 
-Generated code belongs in `Core/Network/Generated/`. Repositories own translation from generated types to app domain models.
+The generator runs with `namingStrategy: idiomatic` so snake_case JSON
+keys map to camelCase Swift identifiers via `CodingKeys`. Generated code
+is produced in DerivedData under `BuildToolPluginIntermediates/` — it
+is not committed and is regenerated on every clean build. Repositories
+own translation from generated types to app domain models; views must
+not import `Components.Schemas.*` directly.
 
 ### API Surface
 
-Base URL is configured in `APIConfiguration.swift`; local development defaults to `http://localhost:8080`.
+Base URL is configured in `APIConfiguration.swift`; local development
+defaults to `http://localhost:8080`. The full contract lives in
+`../api/openapi.yaml` — these tables are a navigation aid, not a
+substitute. If a row here disagrees with the spec, the spec wins.
 
 System:
 
@@ -315,7 +411,66 @@ Features:
 | Get feature | GET | `/api/v1/features/{id}` |
 | Update feature status | PUT | `/api/v1/features/{id}` |
 
-Sessions and panes:
+Tickets:
+
+| Action | Method | Path |
+| --- | --- | --- |
+| List feature tickets | GET | `/api/v1/features/{id}/tickets` |
+| Create feature ticket | POST | `/api/v1/features/{id}/tickets` |
+| Get ticket by public ID | GET | `/api/v1/tickets/{publicId}` |
+| Update ticket | PATCH | `/api/v1/tickets/{publicId}` |
+
+Acceptance criteria:
+
+| Action | Method | Path |
+| --- | --- | --- |
+| List ticket criteria | GET | `/api/v1/tickets/{publicId}/criteria` |
+| Append ticket criterion | POST | `/api/v1/tickets/{publicId}/criteria` |
+| Update criterion | PATCH | `/api/v1/criteria/{id}` |
+| Delete criterion | DELETE | `/api/v1/criteria/{id}` |
+
+Docs:
+
+| Action | Method | Path |
+| --- | --- | --- |
+| List feature docs | GET | `/api/v1/features/{id}/docs` |
+| Create feature doc | POST | `/api/v1/features/{id}/docs` |
+| Get doc | GET | `/api/v1/docs/{id}` |
+| Update doc | PATCH | `/api/v1/docs/{id}` |
+| Delete doc | DELETE | `/api/v1/docs/{id}` |
+
+Decisions:
+
+| Action | Method | Path |
+| --- | --- | --- |
+| List feature decisions | GET | `/api/v1/features/{id}/decisions` |
+| Append feature decision | POST | `/api/v1/features/{id}/decisions` |
+| Delete decision | DELETE | `/api/v1/decisions/{id}` |
+
+Review (ticket diff + actions):
+
+| Action | Method | Path |
+| --- | --- | --- |
+| Get ticket diff | GET | `/api/v1/tickets/{publicId}/diff` |
+| Approve ticket | POST | `/api/v1/tickets/{publicId}/approve` |
+| Request changes | POST | `/api/v1/tickets/{publicId}/request-changes` |
+| Send back to doing | POST | `/api/v1/tickets/{publicId}/send-back` |
+
+Activity:
+
+| Action | Method | Path |
+| --- | --- | --- |
+| List activity events | GET | `/api/v1/activity` |
+
+Agent sessions (persistent ticket-bound records, distinct from raw tmux):
+
+| Action | Method | Path |
+| --- | --- | --- |
+| List project agent sessions | GET | `/api/v1/projects/{idOrSlug}/sessions` |
+| List ticket agent sessions | GET | `/api/v1/tickets/{publicId}/sessions` |
+| Create agent session | POST | `/api/v1/agent-sessions` |
+
+Sessions and panes (raw tmux transport — used by the terminal surface):
 
 | Action | Method | Path |
 | --- | --- | --- |
@@ -343,14 +498,22 @@ Sessions and panes:
 
 Use Runestone for the text render and input surface. Treat it as the foundation for a progressively richer mobile coding transcript, not as a raw `Text` dump.
 
-### Terminal Tab Requirements
+### Terminal Surface Requirements
 
-- The terminal/text tab is always present in the root tab bar.
-- The selected surface is always scoped to project, feature, session, and pane context.
-- The header must expose enough context to prevent sending input to the wrong pane.
-- Input controls should support normal text, submit/enter, escape, interrupt (`C-c`), EOF (`C-d`), arrows, tab, and backspace.
-- The view should reconnect WebSocket streams when returning to foreground.
-- Use the REST output snapshot endpoint to seed or recover the view when WebSocket state is unavailable.
+- The terminal is presented as a full-screen drill-down from Sessions,
+  Inbox `Open pane` actions, or a feature's Sessions sub-tab — it is not
+  a top-level tab. While presented, the bottom tab bar is hidden.
+- The selected surface is always scoped to an explicit project, feature,
+  agent session, and pane. No global anonymous terminal.
+- The slim context bar at the top of the surface (back chevron, session
+  id + pane + tmux session, dots menu) must expose enough context to
+  prevent sending input to the wrong pane.
+- Input controls support normal text, submit / enter, escape, interrupt
+  (`C-c`), EOF (`C-d`), arrows, tab, and backspace, wired through the
+  `keys` field of `SendInputRequest`.
+- The view reconnects WebSocket streams when returning to foreground and
+  uses the REST output snapshot endpoint to seed or recover when the
+  WebSocket is unavailable.
 
 ### Rendering Plan
 
@@ -374,6 +537,6 @@ Use focused tests around transformation and transport boundaries:
 - ViewModel tests for loading, empty, error, and retry states.
 - WebSocket client tests for message decoding and reconnect behavior.
 - Terminal renderer tests for ANSI/style parsing as that support is added.
-- UI tests for project drill-down, feature tabs, and opening the terminal tab with selected context.
+- UI tests for project drill-down, feature sub-tabs, and presenting the terminal surface with the correct project / feature / session / pane context.
 
 Before opening a feature PR, run the iOS test suite from Xcode or `xcodebuild` and verify the backend contract generation still succeeds.
