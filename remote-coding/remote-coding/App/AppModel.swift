@@ -17,7 +17,6 @@ enum AppTab: String, Hashable, Codable, CaseIterable {
 final class AppModel {
     @ObservationIgnored var repository: TmuxAgentRepository
 
-    var selectedTab: AppTab = .inbox
     /// Drives the small accent dot on the Inbox tab.
     /// Real wiring lands with `service-repo-activity`; for now it
     /// defaults to `true` so the indicator is visible during the

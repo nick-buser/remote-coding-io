@@ -10,11 +10,13 @@ import SwiftUI
 @main
 struct remote_codingApp: App {
     @State private var appModel = AppModel()
+    @State private var coordinator = RootCoordinator()
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environment(appModel)
+                .environment(coordinator)
                 .environment(\.accent, appModel.accent)
         }
     }
