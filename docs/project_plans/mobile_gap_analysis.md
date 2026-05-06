@@ -2,6 +2,13 @@
 
 Date: 2026-04-30
 
+> **Superseded by `docs/feature_plans/` for the v2 design.** This document
+> predates the Claude Design v2 bundle and the richer OpenAPI surface
+> (Tickets, Acceptance Criteria, Docs, Decisions, Activity, Agent Sessions,
+> Review) that the iOS app is now being built against. Kept for historical
+> context. Read `docs/feature_plans/00-overview.md` first for the current
+> plan.
+
 ## Purpose
 
 This document tracks the functional gap between the current backend, the web client, and the iOS client. The goal is to make the next mobile work easy to sequence without forgetting what already works elsewhere.
