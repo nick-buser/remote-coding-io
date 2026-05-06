@@ -1,7 +1,7 @@
 ---
 prefix: service
 title: Replace 3-tab shell with v2 5-tab bottom navigation
-status: active
+status: done
 branch: service-0005
 ---
 

@@ -1,8 +1,8 @@
 ---
 prefix: service
 title: Add typed AppRoute and per-tab navigation coordinator
-status: todo
-branch:
+status: active
+branch: service-0006
 ---
 
 ## Description
