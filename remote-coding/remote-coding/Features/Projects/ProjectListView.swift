@@ -2,34 +2,32 @@ import SwiftUI
 
 struct ProjectListView: View {
     @Environment(AppModel.self) private var appModel
+    @Environment(RootCoordinator.self) private var coordinator
     @State private var viewModel = ProjectListViewModel()
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if viewModel.isLoading && viewModel.projects.isEmpty {
-                    ProgressView()
-                } else if let errorMessage = viewModel.errorMessage {
-                    ContentUnavailableView("Projects unavailable", systemImage: "wifi.exclamationmark", description: Text(errorMessage))
-                } else {
-                    List(viewModel.projects) { project in
-                        NavigationLink(value: project) {
-                            ProjectRow(project: project)
-                        }
+        Group {
+            if viewModel.isLoading && viewModel.projects.isEmpty {
+                ProgressView()
+            } else if let errorMessage = viewModel.errorMessage {
+                ContentUnavailableView("Projects unavailable", systemImage: "wifi.exclamationmark", description: Text(errorMessage))
+            } else {
+                List(viewModel.projects) { project in
+                    Button {
+                        coordinator.push(.projectDetail(idOrSlug: project.slug), in: .projects)
+                    } label: {
+                        ProjectRow(project: project)
                     }
-                    .listStyle(.insetGrouped)
+                    .buttonStyle(.plain)
                 }
+                .listStyle(.insetGrouped)
             }
-            .navigationTitle("Projects")
-            .navigationDestination(for: Components.Schemas.Project.self) { project in
-                ProjectDetailView(project: project)
-            }
-            .task {
-                await viewModel.load(repository: appModel.repository)
-            }
-            .refreshable {
-                await viewModel.load(repository: appModel.repository)
-            }
+        }
+        .task {
+            await viewModel.load(repository: appModel.repository)
+        }
+        .refreshable {
+            await viewModel.load(repository: appModel.repository)
         }
     }
 }
@@ -65,8 +63,13 @@ private struct ProjectRow: View {
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
             }
+
+            Spacer()
+
+            Chevron()
         }
         .padding(.vertical, 6)
+        .contentShape(Rectangle())
     }
 
     private var accentColor: Color {
@@ -80,7 +83,10 @@ private struct ProjectRow: View {
 }
 
 #Preview {
-    ProjectListView()
-        .environment(AppModel(repository: MockTmuxAgentRepository()))
+    NavigationStack {
+        ProjectListView()
+            .navigationTitle("Projects")
+    }
+    .environment(AppModel(repository: MockTmuxAgentRepository()))
+    .environment(RootCoordinator())
 }
-

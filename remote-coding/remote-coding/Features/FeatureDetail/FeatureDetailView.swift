@@ -10,6 +10,7 @@ private enum FeatureSection: String, CaseIterable, Identifiable {
 
 struct FeatureDetailView: View {
     @Environment(AppModel.self) private var appModel
+    @Environment(RootCoordinator.self) private var coordinator
     @State private var viewModel: FeatureDetailViewModel
     @State private var selectedSection: FeatureSection = .docs
 
@@ -76,8 +77,14 @@ struct FeatureDetailView: View {
                         .font(.headline)
                     ForEach(viewModel.panes[session.name] ?? []) { pane in
                         Button {
-                            // service-app-route-coordinator wires this through coordinator.push(.agentSession(...)).
-                            // No-op until then so the row stays renderable.
+                            // Same shim as ProjectDetailView — pushes the .agentSession
+                            // route to the legacy TerminalView prototype until
+                            // service-terminal-shell + service-feature-sessions-tab
+                            // resolve a real AgentSession.id.
+                            coordinator.push(
+                                .agentSession(sessionID: Int64(pane.index)),
+                                in: .projects
+                            )
                         } label: {
                             HStack {
                                 Label("Pane \(pane.index)", systemImage: pane.active ? "terminal.fill" : "terminal")

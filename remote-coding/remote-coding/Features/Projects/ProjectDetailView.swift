@@ -11,6 +11,7 @@ private enum ProjectSection: String, CaseIterable, Identifiable {
 
 struct ProjectDetailView: View {
     @Environment(AppModel.self) private var appModel
+    @Environment(RootCoordinator.self) private var coordinator
     @State private var viewModel: ProjectDetailViewModel
     @State private var selectedSection: ProjectSection = .overview
 
@@ -73,9 +74,6 @@ struct ProjectDetailView: View {
                 Label("Open Session", systemImage: "terminal")
             }
         }
-        .navigationDestination(for: Components.Schemas.Feature.self) { feature in
-            FeatureDetailView(project: viewModel.project, feature: feature)
-        }
         .navigationDestination(for: WorkspaceDocument.self) { document in
             DocumentEditorView(document: document)
         }
@@ -94,15 +92,23 @@ struct ProjectDetailView: View {
     private var featureRows: some View {
         Section("Features") {
             ForEach(viewModel.features) { feature in
-                NavigationLink(value: feature) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(feature.title)
-                            .font(.headline)
-                        Text(feature.branchName ?? feature.slug)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                Button {
+                    coordinator.push(.featureDetail(featureID: feature.id), in: .projects)
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(feature.title)
+                                .font(.headline)
+                            Text(feature.branchName ?? feature.slug)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Chevron()
                     }
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
             }
         }
     }
@@ -129,8 +135,15 @@ struct ProjectDetailView: View {
                         .lineLimit(1)
                     ForEach(viewModel.panes[session.name] ?? []) { pane in
                         Button {
-                            // service-app-route-coordinator wires this through coordinator.push(.agentSession(...)).
-                            // No-op until then so the row stays renderable.
+                            // The .agentSession destination still resolves to the legacy
+                            // TerminalView prototype until service-terminal-shell ships;
+                            // a real AgentSession.id replaces this Int64(pane.index)
+                            // shim once service-feature-sessions-tab maps tmux panes to
+                            // persistent agent-session records.
+                            coordinator.push(
+                                .agentSession(sessionID: Int64(pane.index)),
+                                in: .projects
+                            )
                         } label: {
                             HStack {
                                 Label("Pane \(pane.index)", systemImage: pane.active ? "terminal.fill" : "terminal")
