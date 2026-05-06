@@ -1,18 +1,28 @@
 import Foundation
 import Observation
 
-enum AppTab: Hashable {
+/// Top-level destinations in the v2 5-tab shell.
+///
+/// Order matters: the bottom bar renders left-to-right in this order.
+/// `inbox` is the default landing tab for new installs.
+enum AppTab: String, Hashable, Codable, CaseIterable {
+    case inbox
     case projects
-    case terminal
-    case settings
+    case roadmap
+    case sessions
+    case you
 }
 
 @Observable
 final class AppModel {
     @ObservationIgnored var repository: TmuxAgentRepository
 
-    var selectedTab: AppTab = .projects
-    var terminalContext: TerminalContext?
+    var selectedTab: AppTab = .inbox
+    /// Drives the small accent dot on the Inbox tab.
+    /// Real wiring lands with `service-repo-activity`; for now it
+    /// defaults to `true` so the indicator is visible during the
+    /// placeholder shell phase.
+    var needsYou: Bool = true
     var apiConfiguration: APIConfiguration
     var isUsingMockRepository: Bool
     /// User-selected accent. Persistence + UI for changing this lands
@@ -33,11 +43,6 @@ final class AppModel {
         isUsingMockRepository = true
     }
 
-    func openTerminal(project: Components.Schemas.Project, feature: Components.Schemas.Feature?, session: Components.Schemas.Session, pane: Components.Schemas.Pane) {
-        terminalContext = TerminalContext(project: project, feature: feature, session: session, pane: pane)
-        selectedTab = .terminal
-    }
-
     func updateAPIBaseURL(_ rawValue: String) throws {
         let configuration = try APIConfiguration(baseURLString: rawValue)
         APIConfigurationStore.save(configuration)
@@ -55,6 +60,13 @@ final class AppModel {
     }
 }
 
+/// Bundle of routing context for the terminal surface — the project,
+/// optional feature, raw tmux session, and pane the surface is bound to.
+///
+/// Kept in-tree even though the tab shell no longer drives the terminal
+/// directly: `service-app-route-coordinator` reuses it as the payload of
+/// the `agentSession` route, and the terminal shell ticket consumes it
+/// from there.
 struct TerminalContext: Identifiable, Hashable {
     var id: String {
         "\(project.id)-\(feature?.id ?? 0)-\(session.name)-\(pane.index)"

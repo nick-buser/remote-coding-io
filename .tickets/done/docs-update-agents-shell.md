@@ -1,7 +1,7 @@
 ---
 prefix: docs
 title: Update AGENTS.md and claude.md to reflect the 5-tab v2 shell
-status: active
+status: done
 branch: docs-0005
 ---
 
