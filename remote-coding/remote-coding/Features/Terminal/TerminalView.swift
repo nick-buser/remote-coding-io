@@ -4,6 +4,17 @@ struct TerminalView: View {
     @Environment(AppModel.self) private var appModel
     @State private var viewModel = TerminalViewModel()
 
+    /// The pane this surface is bound to. Optional only so the empty
+    /// preview / fallback path stays representable; production callers
+    /// always pass a concrete context. Wiring lives in
+    /// `service-app-route-coordinator` (the `agentSession` route);
+    /// `service-terminal-shell` replaces this prototype outright.
+    let context: TerminalContext?
+
+    init(context: TerminalContext? = nil) {
+        self.context = context
+    }
+
     private let quickKeys = ["Enter", "Escape", "Tab", "BSpace", "Up", "Down", "Left", "Right", "C-c", "C-d"]
 
     var body: some View {
@@ -53,8 +64,8 @@ struct TerminalView: View {
             }
             .navigationTitle("Terminal")
             .navigationBarTitleDisplayMode(.inline)
-            .task(id: appModel.terminalContext) {
-                await viewModel.configure(context: appModel.terminalContext, repository: appModel.repository)
+            .task(id: context) {
+                await viewModel.configure(context: context, repository: appModel.repository)
             }
             .toolbar {
                 Button {

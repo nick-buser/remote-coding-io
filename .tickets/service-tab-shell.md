@@ -1,8 +1,8 @@
 ---
 prefix: service
 title: Replace 3-tab shell with v2 5-tab bottom navigation
-status: todo
-branch:
+status: active
+branch: service-0005
 ---
 
 ## Description

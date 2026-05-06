@@ -129,7 +129,8 @@ struct ProjectDetailView: View {
                         .lineLimit(1)
                     ForEach(viewModel.panes[session.name] ?? []) { pane in
                         Button {
-                            appModel.openTerminal(project: viewModel.project, feature: nil, session: session, pane: pane)
+                            // service-app-route-coordinator wires this through coordinator.push(.agentSession(...)).
+                            // No-op until then so the row stays renderable.
                         } label: {
                             HStack {
                                 Label("Pane \(pane.index)", systemImage: pane.active ? "terminal.fill" : "terminal")
