@@ -24,6 +24,9 @@ protocol TmuxAgentRepository {
     func createFeatureDecision(featureID: Int64, body: Components.Schemas.CreateDecisionRequest) async throws -> Components.Schemas.Decision
     func deleteDecision(id: Int64) async throws
     func listActivity(project: String?, feature: Int64?, since: Date?, limit: Int?) async throws -> [Components.Schemas.ActivityEvent]
+    func listProjectAgentSessions(projectIDOrSlug: String) async throws -> [Components.Schemas.AgentSession]
+    func listTicketAgentSessions(ticketPublicID: String) async throws -> [Components.Schemas.AgentSession]
+    func createAgentSession(_ body: Components.Schemas.CreateAgentSessionRequest) async throws -> Components.Schemas.AgentSession
     func listProjectDocuments(projectID: Int64) async throws -> [LocalProjectNote]
     func saveDocument(_ document: LocalProjectNote) async throws -> LocalProjectNote
     func openProjectSession(idOrSlug: String) async throws -> Components.Schemas.Project

@@ -21,6 +21,8 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
     private var nextDecisionID: Int64
     private var activityEvents: [Components.Schemas.ActivityEvent]
     private var nextActivityEventID: Int64
+    private var agentSessions: [Components.Schemas.AgentSession]
+    private var nextAgentSessionID: Int64
     // Tickets are stored without their inline `criteria` array; the
     // single-ticket GET attaches criteria from `criteriaByTicketID` so
     // listTickets can match the contract (criteria omitted) without a
@@ -77,6 +79,9 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
         let activitySeed = Self.seedActivityEvents()
         activityEvents = activitySeed.events
         nextActivityEventID = activitySeed.nextID
+        let agentSessionSeed = Self.seedAgentSessions()
+        agentSessions = agentSessionSeed.sessions
+        nextAgentSessionID = agentSessionSeed.nextID
 
         let seed = Self.seedTickets()
         tickets = seed.tickets
@@ -417,6 +422,100 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
     // fixture without rebuilding the whole repository surface.
     func appendActivityEvent(_ event: Components.Schemas.ActivityEvent) {
         activityEvents.append(event)
+    }
+
+    // MARK: Agent sessions
+
+    func listProjectAgentSessions(projectIDOrSlug: String) async throws -> [Components.Schemas.AgentSession] {
+        let project = try await getProject(idOrSlug: projectIDOrSlug)
+        let projectFeatureIDs = Set(features.filter { $0.projectId == project.id }.map(\.id))
+        return agentSessions
+            .filter { session in
+                guard let ticketID = session.ticketId,
+                      let ticket = tickets.first(where: { $0.id == ticketID }) else {
+                    return false
+                }
+                return projectFeatureIDs.contains(ticket.featureId)
+            }
+            .sorted { $0.lastActiveAt > $1.lastActiveAt }
+    }
+
+    func listTicketAgentSessions(ticketPublicID: String) async throws -> [Components.Schemas.AgentSession] {
+        guard let ticket = tickets.first(where: { $0.publicId == ticketPublicID }) else {
+            throw MockRepositoryError.notFound
+        }
+        return agentSessions
+            .filter { $0.ticketId == ticket.id }
+            .sorted { $0.lastActiveAt > $1.lastActiveAt }
+    }
+
+    func createAgentSession(_ body: Components.Schemas.CreateAgentSessionRequest) async throws -> Components.Schemas.AgentSession {
+        guard let ticket = tickets.first(where: { $0.publicId == body.ticketPublicId }) else {
+            throw MockRepositoryError.notFound
+        }
+        guard let feature = features.first(where: { $0.id == ticket.featureId }) else {
+            throw MockRepositoryError.notFound
+        }
+        guard let project = projects.first(where: { $0.id == feature.projectId }) else {
+            throw MockRepositoryError.notFound
+        }
+        let now = Date()
+        let derivedTmux = body.tmuxSession ?? Self.derivedTmuxSessionName(
+            project: project, feature: feature, ticket: ticket
+        )
+        let session = Components.Schemas.AgentSession(
+            id: nextAgentSessionID,
+            ticketId: ticket.id,
+            tmuxSession: derivedTmux,
+            state: body.state ?? .idle,
+            pane: body.pane,
+            cpu: body.cpu ?? 0,
+            startTime: now,
+            endTime: nil,
+            lastActiveAt: now,
+            transcriptKey: nil,
+            tokenUsage: nil,
+            costEstimate: nil,
+            createdAt: now
+        )
+        nextAgentSessionID += 1
+        agentSessions.append(session)
+        // Activity feed mirror — service-repo-activity is in place, so
+        // the poller / Inbox sees the spawn without an extra fetch.
+        activityEvents.append(Components.Schemas.ActivityEvent(
+            id: nextActivityEventID,
+            projectId: project.id,
+            featureId: feature.id,
+            ticketId: ticket.id,
+            actor: .agent,
+            actorName: derivedTmux,
+            verb: "spawned session",
+            kind: .check,
+            detail: "tmux: \(derivedTmux)",
+            createdAt: now
+        ))
+        nextActivityEventID += 1
+        return session
+    }
+
+    private static func derivedTmuxSessionName(
+        project: Components.Schemas.Project,
+        feature: Components.Schemas.Feature,
+        ticket: Components.Schemas.Ticket
+    ) -> String {
+        let projectSlug = sluggify(project.slug)
+        let featureSlug = sluggify(feature.slug)
+        let branch = ticket.branchName.isEmpty ? ticket.publicId : ticket.branchName
+        let branchSlug = sluggify(branch)
+        return "\(projectSlug)__\(featureSlug)__\(branchSlug)"
+    }
+
+    private static func sluggify(_ source: String) -> String {
+        source
+            .lowercased()
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "-", with: "_")
+            .replacingOccurrences(of: " ", with: "_")
     }
 
     // MARK: Local project notes
@@ -1142,5 +1241,66 @@ private extension MockTmuxAgentRepository {
         }
 
         return (events, eventID)
+    }
+
+    // Seeds the four agent sessions from the design's data.jsx
+    // (session-04, -05, -07, -08) onto seeded ticket ids. State,
+    // pane, and CPU come straight from the fixture; uptime is
+    // derived from the elapsed time since startTime so views can
+    // exercise AgentSessionExtensions.uptime against realistic
+    // values.
+    static func seedAgentSessions() -> (sessions: [Components.Schemas.AgentSession], nextID: Int64) {
+        struct Spec {
+            let ticketID: Int64?
+            let tmuxSession: String
+            let state: Components.Schemas.SessionState
+            let pane: String
+            let cpu: Double
+            let startMinutesAgo: Double
+            let lastActiveMinutesAgo: Double
+        }
+        let specs: [Spec] = [
+            // session-04 → TMX-0042 (ticket id 200), idle, 2h 14m uptime
+            Spec(ticketID: 200, tmuxSession: "tmux_server_coding_app__session_stream_and_pane_input__feat_tmx_0042_pane_registry",
+                 state: .idle, pane: "agent:0.0", cpu: 2,
+                 startMinutesAgo: 134, lastActiveMinutesAgo: 6),
+            // session-05 → TMX-0047 (ticket id 205), awaiting-input, 4h 02m
+            Spec(ticketID: 205, tmuxSession: "tmux_server_coding_app__mobile_client_planning__feat_tmx_0047_context_bundle",
+                 state: .awaitingInput, pane: "agent:1.0", cpu: 0,
+                 startMinutesAgo: 242, lastActiveMinutesAgo: 12),
+            // session-07 → TMX-0050 (ticket id 208), active, 47m
+            Spec(ticketID: 208, tmuxSession: "remote_coding_ios__project_hierarchy_prototype__feat_tmx_0050_diff_viewer",
+                 state: .active, pane: "agent:2.0", cpu: 31,
+                 startMinutesAgo: 47, lastActiveMinutesAgo: 1),
+            // session-08 → TMX-0048 (ticket id 206), active, 22m
+            Spec(ticketID: 206, tmuxSession: "tmux_server_coding_app__mobile_client_planning__feat_tmx_0048_prd_resolver",
+                 state: .active, pane: "agent:1.1", cpu: 18,
+                 startMinutesAgo: 22, lastActiveMinutesAgo: 1)
+        ]
+
+        var sessions: [Components.Schemas.AgentSession] = []
+        var sessionID: Int64 = 800
+        let now = Date()
+
+        for spec in specs {
+            sessions.append(Components.Schemas.AgentSession(
+                id: sessionID,
+                ticketId: spec.ticketID,
+                tmuxSession: spec.tmuxSession,
+                state: spec.state,
+                pane: spec.pane,
+                cpu: spec.cpu,
+                startTime: now.addingTimeInterval(-spec.startMinutesAgo * 60),
+                endTime: nil,
+                lastActiveAt: now.addingTimeInterval(-spec.lastActiveMinutesAgo * 60),
+                transcriptKey: nil,
+                tokenUsage: nil,
+                costEstimate: nil,
+                createdAt: now.addingTimeInterval(-spec.startMinutesAgo * 60)
+            ))
+            sessionID += 1
+        }
+
+        return (sessions, sessionID)
     }
 }

@@ -442,6 +442,54 @@ final class LiveTmuxAgentRepository: TmuxAgentRepository {
         }
     }
 
+    // MARK: Agent sessions
+
+    func listProjectAgentSessions(projectIDOrSlug: String) async throws -> [Components.Schemas.AgentSession] {
+        let output = try await client.listProjectSessions(.init(path: .init(idOrSlug: projectIDOrSlug)))
+        switch output {
+        case .ok(let response):
+            let sessions = try response.body.json
+            return sessions.sorted { $0.lastActiveAt > $1.lastActiveAt }
+        case .notFound(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .serviceUnavailable(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .undocumented(let statusCode, _):
+            throw RepositoryError.http(statusCode)
+        }
+    }
+
+    func listTicketAgentSessions(ticketPublicID: String) async throws -> [Components.Schemas.AgentSession] {
+        let output = try await client.listTicketSessions(.init(path: .init(publicId: ticketPublicID)))
+        switch output {
+        case .ok(let response):
+            let sessions = try response.body.json
+            return sessions.sorted { $0.lastActiveAt > $1.lastActiveAt }
+        case .notFound(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .serviceUnavailable(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .undocumented(let statusCode, _):
+            throw RepositoryError.http(statusCode)
+        }
+    }
+
+    func createAgentSession(_ body: Components.Schemas.CreateAgentSessionRequest) async throws -> Components.Schemas.AgentSession {
+        let output = try await client.createAgentSession(.init(body: .json(body)))
+        switch output {
+        case .created(let response):
+            return try response.body.json
+        case .badRequest(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .notFound(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .serviceUnavailable(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .undocumented(let statusCode, _):
+            throw RepositoryError.http(statusCode)
+        }
+    }
+
     // MARK: Local project notes (UserDefaults — no contract endpoint yet)
 
     func listProjectDocuments(projectID: Int64) async throws -> [LocalProjectNote] {
