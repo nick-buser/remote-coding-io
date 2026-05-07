@@ -15,9 +15,13 @@ protocol TmuxAgentRepository {
     func createCriterion(ticketPublicID: String, body: Components.Schemas.CreateAcceptanceCriterionRequest) async throws -> Components.Schemas.AcceptanceCriterion
     func updateCriterion(id: Int64, body: Components.Schemas.UpdateAcceptanceCriterionRequest) async throws -> Components.Schemas.AcceptanceCriterion
     func deleteCriterion(id: Int64) async throws
-    func listProjectDocuments(projectID: Int64) async throws -> [WorkspaceDocument]
-    func listFeatureDocuments(featureID: Int64) async throws -> [WorkspaceDocument]
-    func saveDocument(_ document: WorkspaceDocument) async throws -> WorkspaceDocument
+    func listFeatureDocs(featureID: Int64) async throws -> [Components.Schemas.Doc]
+    func getDoc(id: Int64) async throws -> Components.Schemas.Doc
+    func createFeatureDoc(featureID: Int64, body: Components.Schemas.CreateDocRequest) async throws -> Components.Schemas.Doc
+    func updateDoc(id: Int64, body: Components.Schemas.UpdateDocRequest) async throws -> Components.Schemas.Doc
+    func deleteDoc(id: Int64) async throws
+    func listProjectDocuments(projectID: Int64) async throws -> [LocalProjectNote]
+    func saveDocument(_ document: LocalProjectNote) async throws -> LocalProjectNote
     func openProjectSession(idOrSlug: String) async throws -> Components.Schemas.Project
     func listSessions(projectID: Int64) async throws -> [Components.Schemas.Session]
     func listSessions(featureID: Int64) async throws -> [Components.Schemas.Session]

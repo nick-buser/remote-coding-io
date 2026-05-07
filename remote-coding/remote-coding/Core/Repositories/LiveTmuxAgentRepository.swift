@@ -4,16 +4,19 @@ import OpenAPIURLSession
 
 final class LiveTmuxAgentRepository: TmuxAgentRepository {
     private let client: any APIProtocol
+    private let localNoteStore: LocalProjectNoteStore
 
-    init(configuration: APIConfiguration) {
+    init(configuration: APIConfiguration, userDefaults: UserDefaults = .standard) {
         self.client = Client(
             serverURL: configuration.baseURL,
             transport: URLSessionTransport()
         )
+        self.localNoteStore = LocalProjectNoteStore(userDefaults: userDefaults)
     }
 
-    init(client: any APIProtocol) {
+    init(client: any APIProtocol, userDefaults: UserDefaults = .standard) {
         self.client = client
+        self.localNoteStore = LocalProjectNoteStore(userDefaults: userDefaults)
     }
 
     // MARK: Projects
@@ -280,13 +283,102 @@ final class LiveTmuxAgentRepository: TmuxAgentRepository {
         }
     }
 
-    // MARK: Documents (not exposed by the contract yet)
+    // MARK: Feature docs (live, contract-backed)
 
-    func listProjectDocuments(projectID: Int64) async throws -> [WorkspaceDocument] { [] }
-    func listFeatureDocuments(featureID: Int64) async throws -> [WorkspaceDocument] { [] }
+    func listFeatureDocs(featureID: Int64) async throws -> [Components.Schemas.Doc] {
+        let output = try await client.listFeatureDocs(.init(path: .init(id: featureID)))
+        switch output {
+        case .ok(let response):
+            let docs = try response.body.json
+            return docs.sorted { lhs, rhs in
+                if lhs.pinned != rhs.pinned {
+                    return lhs.pinned && !rhs.pinned
+                }
+                return lhs.updatedAt > rhs.updatedAt
+            }
+        case .notFound(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .serviceUnavailable(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .undocumented(let statusCode, _):
+            throw RepositoryError.http(statusCode)
+        }
+    }
 
-    func saveDocument(_ document: WorkspaceDocument) async throws -> WorkspaceDocument {
-        throw RepositoryError.unsupported("Document persistence is not exposed by the backend API yet.")
+    func getDoc(id: Int64) async throws -> Components.Schemas.Doc {
+        let output = try await client.getDoc(.init(path: .init(id: id)))
+        switch output {
+        case .ok(let response):
+            return try response.body.json
+        case .notFound(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .serviceUnavailable(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .undocumented(let statusCode, _):
+            throw RepositoryError.http(statusCode)
+        }
+    }
+
+    func createFeatureDoc(featureID: Int64, body: Components.Schemas.CreateDocRequest) async throws -> Components.Schemas.Doc {
+        let output = try await client.createFeatureDoc(.init(
+            path: .init(id: featureID),
+            body: .json(body)
+        ))
+        switch output {
+        case .created(let response):
+            return try response.body.json
+        case .badRequest(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .notFound(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .serviceUnavailable(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .undocumented(let statusCode, _):
+            throw RepositoryError.http(statusCode)
+        }
+    }
+
+    func updateDoc(id: Int64, body: Components.Schemas.UpdateDocRequest) async throws -> Components.Schemas.Doc {
+        let output = try await client.updateDoc(.init(
+            path: .init(id: id),
+            body: .json(body)
+        ))
+        switch output {
+        case .ok(let response):
+            return try response.body.json
+        case .badRequest(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .notFound(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .serviceUnavailable(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .undocumented(let statusCode, _):
+            throw RepositoryError.http(statusCode)
+        }
+    }
+
+    func deleteDoc(id: Int64) async throws {
+        let output = try await client.deleteDoc(.init(path: .init(id: id)))
+        switch output {
+        case .noContent:
+            return
+        case .notFound(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .serviceUnavailable(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .undocumented(let statusCode, _):
+            throw RepositoryError.http(statusCode)
+        }
+    }
+
+    // MARK: Local project notes (UserDefaults — no contract endpoint yet)
+
+    func listProjectDocuments(projectID: Int64) async throws -> [LocalProjectNote] {
+        localNoteStore.list(projectID: projectID)
+    }
+
+    func saveDocument(_ document: LocalProjectNote) async throws -> LocalProjectNote {
+        localNoteStore.save(document)
     }
 
     // MARK: Sessions

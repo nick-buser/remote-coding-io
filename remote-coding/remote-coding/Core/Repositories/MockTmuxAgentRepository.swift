@@ -14,7 +14,9 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
     // still satisfy preview wiring without leaking a contract-divergent
     // field onto the project type.
     private var tmuxSessionByProjectID: [Int64: String]
-    private var documents: [WorkspaceDocument]
+    private var localNotes: [LocalProjectNote]
+    private var docs: [Components.Schemas.Doc]
+    private var nextDocID: Int64
     // Tickets are stored without their inline `criteria` array; the
     // single-ticket GET attaches criteria from `criteriaByTicketID` so
     // listTickets can match the contract (criteria omitted) without a
@@ -61,7 +63,10 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
             "remote_coding_ios:0": iOSOutput
         ]
 
-        documents = Self.seedDocuments
+        localNotes = Self.seedLocalNotes
+        let docSeed = Self.seedDocs()
+        docs = docSeed.docs
+        nextDocID = docSeed.nextDocID
 
         let seed = Self.seedTickets()
         tickets = seed.tickets
@@ -260,33 +265,96 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
         tickets[index].updatedAt = Date()
     }
 
-    func listProjectDocuments(projectID: Int64) async throws -> [WorkspaceDocument] {
-        documents.filter {
-            if case .project(projectID) = $0.owner {
-                return true
-            }
-            return false
+    // MARK: Feature docs
+
+    func listFeatureDocs(featureID: Int64) async throws -> [Components.Schemas.Doc] {
+        guard features.contains(where: { $0.id == featureID }) else {
+            throw MockRepositoryError.notFound
         }
+        return docs
+            .filter { $0.featureId == featureID }
+            .sorted { lhs, rhs in
+                if lhs.pinned != rhs.pinned {
+                    return lhs.pinned && !rhs.pinned
+                }
+                return lhs.updatedAt > rhs.updatedAt
+            }
     }
 
-    func listFeatureDocuments(featureID: Int64) async throws -> [WorkspaceDocument] {
-        documents.filter {
-            if case .feature(featureID) = $0.owner {
-                return true
-            }
-            return false
+    func getDoc(id: Int64) async throws -> Components.Schemas.Doc {
+        guard let doc = docs.first(where: { $0.id == id }) else {
+            throw MockRepositoryError.notFound
         }
+        return doc
     }
 
-    func saveDocument(_ document: WorkspaceDocument) async throws -> WorkspaceDocument {
+    func createFeatureDoc(featureID: Int64, body: Components.Schemas.CreateDocRequest) async throws -> Components.Schemas.Doc {
+        guard features.contains(where: { $0.id == featureID }) else {
+            throw MockRepositoryError.notFound
+        }
+        let now = Date()
+        let bodyBlocks = body.bodyBlocks ?? "[]"
+        let doc = Components.Schemas.Doc(
+            id: nextDocID,
+            featureId: featureID,
+            kind: body.kind,
+            title: body.title,
+            bodyBlocks: bodyBlocks,
+            objectKey: nil,
+            wordCount: Self.wordCount(of: bodyBlocks),
+            pinned: body.pinned ?? false,
+            createdAt: now,
+            updatedAt: now
+        )
+        nextDocID += 1
+        docs.append(doc)
+        return doc
+    }
+
+    func updateDoc(id: Int64, body: Components.Schemas.UpdateDocRequest) async throws -> Components.Schemas.Doc {
+        guard let index = docs.firstIndex(where: { $0.id == id }) else {
+            throw MockRepositoryError.notFound
+        }
+        if let kind = body.kind { docs[index].kind = kind }
+        if let title = body.title { docs[index].title = title }
+        if let bodyBlocks = body.bodyBlocks {
+            docs[index].bodyBlocks = bodyBlocks
+            docs[index].wordCount = Self.wordCount(of: bodyBlocks)
+        }
+        if let pinned = body.pinned { docs[index].pinned = pinned }
+        docs[index].updatedAt = Date()
+        return docs[index]
+    }
+
+    func deleteDoc(id: Int64) async throws {
+        guard let index = docs.firstIndex(where: { $0.id == id }) else {
+            throw MockRepositoryError.notFound
+        }
+        docs.remove(at: index)
+    }
+
+    // MARK: Local project notes
+
+    func listProjectDocuments(projectID: Int64) async throws -> [LocalProjectNote] {
+        localNotes.filter { $0.projectID == projectID }
+    }
+
+    func saveDocument(_ document: LocalProjectNote) async throws -> LocalProjectNote {
         var saved = document
         saved.updatedAt = Date()
-        if let index = documents.firstIndex(where: { $0.id == document.id }) {
-            documents[index] = saved
+        if let index = localNotes.firstIndex(where: { $0.id == document.id }) {
+            localNotes[index] = saved
         } else {
-            documents.append(saved)
+            localNotes.append(saved)
         }
         return saved
+    }
+
+    private static func wordCount(of bodyBlocks: String) -> Int {
+        bodyBlocks
+            .split(whereSeparator: { $0.isWhitespace })
+            .filter { !$0.isEmpty }
+            .count
     }
 
     func openProjectSession(idOrSlug: String) async throws -> Components.Schemas.Project {
@@ -733,72 +801,118 @@ private extension MockTmuxAgentRepository {
         return (tickets, criteria, ticketID, criterionID, 71)
     }
 
-    static var seedDocuments: [WorkspaceDocument] {
+    static var seedLocalNotes: [LocalProjectNote] {
         [
-            WorkspaceDocument(
+            LocalProjectNote(
                 id: "project-1-brief",
-                owner: .project(1),
+                projectID: 1,
                 kind: .projectBrief,
                 title: "Project brief",
                 body: "Build a backend and native clients for launching, monitoring, and steering tmux-backed coding sessions.",
                 updatedAt: Date()
             ),
-            WorkspaceDocument(
+            LocalProjectNote(
                 id: "project-1-notes",
-                owner: .project(1),
+                projectID: 1,
                 kind: .projectNotes,
                 title: "Project notes",
                 body: "OpenAPI remains the source of truth. Sessions currently hang off projects/features; ticket endpoints are planned but not exposed yet.",
                 updatedAt: Date()
-            ),
-            WorkspaceDocument(
-                id: "feature-11-description",
-                owner: .feature(11),
-                kind: .featureDescription,
-                title: "Description",
-                body: "Stream pane output over WebSocket and send tmux input through the REST endpoint.",
-                updatedAt: Date()
-            ),
-            WorkspaceDocument(
-                id: "feature-11-prompt",
-                owner: .feature(11),
-                kind: .promptBuildout,
-                title: "Prompt buildout",
-                body: "Implement the smallest path that lets a mobile client pick a pane, see output, submit empty Enter, and send control commands.",
-                updatedAt: Date()
-            ),
-            WorkspaceDocument(
-                id: "feature-11-criteria",
-                owner: .feature(11),
-                kind: .acceptanceCriteria,
-                title: "Acceptance criteria",
-                body: "- [ ] Empty Enter sends a request with no text payload.\\n- [ ] Ctrl-C and Ctrl-D are available as explicit keys.\\n- [ ] Pane output can recover from a REST snapshot.",
-                updatedAt: Date()
-            ),
-            WorkspaceDocument(
-                id: "feature-21-description",
-                owner: .feature(21),
-                kind: .featureDescription,
-                title: "Description",
-                body: "Create the first native iOS project hierarchy and terminal prototype using OpenAPI-shaped mocks.",
-                updatedAt: Date()
-            ),
-            WorkspaceDocument(
-                id: "feature-21-prompt",
-                owner: .feature(21),
-                kind: .promptBuildout,
-                title: "Prompt buildout",
-                body: "Prefer native list navigation, editor panes for project/feature docs, and a terminal tab that keeps context visible.",
-                updatedAt: Date()
-            ),
-            WorkspaceDocument(
-                id: "feature-21-criteria",
-                owner: .feature(21),
-                kind: .acceptanceCriteria,
-                title: "Acceptance criteria",
-                body: "- [ ] Project list drills into project detail.\\n- [ ] Feature detail exposes editable description, prompt, and criteria.\\n- [ ] Terminal input supports empty Enter and tmux control keys.",
-                updatedAt: Date()
             )
         ]
+    }
+
+    // Seed feature-level Docs with TipTap-shaped body_blocks JSON. The
+    // contract treats body_blocks as opaque text; the renderer view
+    // (service-feature-prd-tab) is what parses it. Pinned docs surface
+    // first per the contract's list ordering, with the rest sorted by
+    // updatedAt desc (handled in listFeatureDocs).
+    static func seedDocs() -> (docs: [Components.Schemas.Doc], nextDocID: Int64) {
+        struct Spec {
+            let featureID: Int64
+            let kind: Components.Schemas.DocKind
+            let title: String
+            let bodyBlocks: String
+            let pinned: Bool
+            let hoursAgo: Double
+        }
+        let visionBlocks = """
+        [{"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"Vision"}]},\
+        {"type":"paragraph","content":[{"type":"text","text":"Stream pane output over WebSocket and send tmux input through the REST endpoint."}]},\
+        {"type":"paragraph","content":[{"type":"text","text":"The terminal becomes a first-class drill-down surface, not a tab."}]}]
+        """
+        let prdBlocks = """
+        [{"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"Problem"}]},\
+        {"type":"paragraph","content":[{"type":"text","text":"Mobile users need to read tmux output and steer agents without falling back to SSH."}]},\
+        {"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"Plan"}]},\
+        {"type":"paragraph","content":[{"type":"text","text":"Implement the smallest path that lets a mobile client pick a pane, see output, submit empty Enter, and send control commands."}]}]
+        """
+        let notesBlocks = """
+        [{"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"Notes"}]},\
+        {"type":"bulletList","content":[\
+        {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"Use Runestone for the text surface so prompt-block segmentation can come later."}]}]},\
+        {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"Don't conflate raw tmux Sessions with persistent AgentSession records."}]}]}]}]
+        """
+        let designBlocks = """
+        [{"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"Layout"}]},\
+        {"type":"paragraph","content":[{"type":"text","text":"Three deep links: Tickets, PRD, Sessions. Hero: status pill + title + vision."}]},\
+        {"type":"heading","attrs":{"level":3},"content":[{"type":"text","text":"Progress bar"}]},\
+        {"type":"paragraph","content":[{"type":"text","text":"Reads progress_cached on the feature; recomputed server-side on ticket transitions."}]}]
+        """
+        let logBlocks = """
+        [{"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"Build log"}]},\
+        {"type":"paragraph","content":[{"type":"text","text":"Service-0006 closed the routing primitive; per-tab paths persist."}]},\
+        {"type":"paragraph","content":[{"type":"text","text":"Service-0007 landed Tickets + AcceptanceCriteria end-to-end."}]}]
+        """
+        let customBlocks = """
+        [{"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"Prompt buildout"}]},\
+        {"type":"paragraph","content":[{"type":"text","text":"Prefer native list navigation, editor panes for project/feature docs, and a terminal that keeps context visible."}]}]
+        """
+
+        let specs: [Spec] = [
+            // Feature 11 — Session stream and pane input
+            Spec(featureID: 11, kind: .vision, title: "Session stream vision",
+                 bodyBlocks: visionBlocks, pinned: true, hoursAgo: 0.5),
+            Spec(featureID: 11, kind: .prd, title: "Session stream PRD",
+                 bodyBlocks: prdBlocks, pinned: false, hoursAgo: 6),
+            Spec(featureID: 11, kind: .notes, title: "Implementation notes",
+                 bodyBlocks: notesBlocks, pinned: false, hoursAgo: 24),
+            // Feature 12 — Mobile client planning
+            Spec(featureID: 12, kind: .prd, title: "Mobile parity PRD",
+                 bodyBlocks: prdBlocks, pinned: true, hoursAgo: 1),
+            Spec(featureID: 12, kind: .design, title: "Drill-down layout",
+                 bodyBlocks: designBlocks, pinned: false, hoursAgo: 48),
+            Spec(featureID: 12, kind: .log, title: "Build log",
+                 bodyBlocks: logBlocks, pinned: false, hoursAgo: 12),
+            // Feature 21 — Project hierarchy prototype
+            Spec(featureID: 21, kind: .vision, title: "Hierarchy vision",
+                 bodyBlocks: visionBlocks, pinned: false, hoursAgo: 4),
+            Spec(featureID: 21, kind: .custom, title: "Prompt buildout",
+                 bodyBlocks: customBlocks, pinned: true, hoursAgo: 2)
+        ]
+
+        var docs: [Components.Schemas.Doc] = []
+        var docID: Int64 = 500
+        let now = Date()
+
+        for spec in specs {
+            let updatedAt = now.addingTimeInterval(-spec.hoursAgo * 3600)
+            let createdAt = updatedAt.addingTimeInterval(-72 * 3600)
+            docs.append(Components.Schemas.Doc(
+                id: docID,
+                featureId: spec.featureID,
+                kind: spec.kind,
+                title: spec.title,
+                bodyBlocks: spec.bodyBlocks,
+                objectKey: nil,
+                wordCount: wordCount(of: spec.bodyBlocks),
+                pinned: spec.pinned,
+                createdAt: createdAt,
+                updatedAt: updatedAt
+            ))
+            docID += 1
+        }
+
+        return (docs, docID)
     }
 }

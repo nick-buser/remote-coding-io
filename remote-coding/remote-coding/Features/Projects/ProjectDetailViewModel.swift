@@ -6,7 +6,7 @@ import Observation
 final class ProjectDetailViewModel {
     var project: Components.Schemas.Project
     var features: [Components.Schemas.Feature] = []
-    var documents: [WorkspaceDocument] = []
+    var notes: [LocalProjectNote] = []
     var sessions: [Components.Schemas.Session] = []
     var panes: [String: [Components.Schemas.Pane]] = [:]
     var isLoading = false
@@ -21,10 +21,10 @@ final class ProjectDetailViewModel {
         errorMessage = nil
         do {
             async let loadedFeatures = repository.listFeatures(projectIDOrSlug: project.slug)
-            async let loadedDocuments = repository.listProjectDocuments(projectID: project.id)
+            async let loadedNotes = repository.listProjectDocuments(projectID: project.id)
             async let loadedSessions = repository.listSessions(projectID: project.id)
             features = try await loadedFeatures
-            documents = try await loadedDocuments
+            notes = try await loadedNotes
             sessions = try await loadedSessions
             for session in sessions {
                 panes[session.name] = try await repository.listPanes(sessionName: session.name)

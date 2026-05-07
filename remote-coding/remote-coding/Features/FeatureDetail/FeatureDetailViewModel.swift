@@ -6,7 +6,7 @@ import Observation
 final class FeatureDetailViewModel {
     var project: Components.Schemas.Project
     var feature: Components.Schemas.Feature
-    var documents: [WorkspaceDocument] = []
+    var docs: [Components.Schemas.Doc] = []
     var sessions: [Components.Schemas.Session] = []
     var panes: [String: [Components.Schemas.Pane]] = [:]
     var errorMessage: String?
@@ -18,9 +18,9 @@ final class FeatureDetailViewModel {
 
     func load(repository: TmuxAgentRepository) async {
         do {
-            async let loadedDocuments = repository.listFeatureDocuments(featureID: feature.id)
+            async let loadedDocs = repository.listFeatureDocs(featureID: feature.id)
             async let loadedSessions = repository.listSessions(featureID: feature.id)
-            documents = try await loadedDocuments
+            docs = try await loadedDocs
             sessions = try await loadedSessions
             for session in sessions {
                 panes[session.name] = try await repository.listPanes(sessionName: session.name)

@@ -2,7 +2,6 @@ import SwiftUI
 
 private enum FeatureSection: String, CaseIterable, Identifiable {
     case docs = "Docs"
-    case criteria = "Criteria"
     case sessions = "Sessions"
 
     var id: String { rawValue }
@@ -42,9 +41,7 @@ struct FeatureDetailView: View {
 
             switch selectedSection {
             case .docs:
-                documentList(viewModel.documents.filter { $0.kind != .acceptanceCriteria })
-            case .criteria:
-                documentList(viewModel.documents.filter { $0.kind == .acceptanceCriteria })
+                docsList
             case .sessions:
                 sessionList
             }
@@ -54,17 +51,30 @@ struct FeatureDetailView: View {
         .task {
             await viewModel.load(repository: appModel.repository)
         }
-        .navigationDestination(for: WorkspaceDocument.self) { document in
-            DocumentEditorView(document: document)
-        }
     }
 
-    private func documentList(_ documents: [WorkspaceDocument]) -> some View {
-        Section(selectedSection.rawValue) {
-            ForEach(documents) { document in
-                NavigationLink(value: document) {
-                    Label(document.title, systemImage: document.kind.systemImage)
+    private var docsList: some View {
+        Section("Docs") {
+            // Tap routes through .docDetail; the destination is still a
+            // RoutePlaceholder until service-feature-prd-tab ships the
+            // TipTap renderer that paints body_blocks.
+            ForEach(viewModel.docs) { doc in
+                Button {
+                    coordinator.push(.docDetail(docID: doc.id), in: .projects)
+                } label: {
+                    HStack {
+                        Label(doc.title, systemImage: doc.kind.systemImage)
+                        Spacer()
+                        if doc.pinned {
+                            Image(systemName: "pin.fill")
+                                .foregroundStyle(.tertiary)
+                                .font(.caption)
+                        }
+                        Chevron()
+                    }
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
             }
         }
     }
@@ -101,3 +111,15 @@ struct FeatureDetailView: View {
     }
 }
 
+extension Components.Schemas.DocKind {
+    var systemImage: String {
+        switch self {
+        case .vision: "lightbulb"
+        case .prd: "doc.text"
+        case .design: "rectangle.3.group"
+        case .notes: "note.text"
+        case .log: "list.bullet"
+        case .custom: "text.bubble"
+        }
+    }
+}
