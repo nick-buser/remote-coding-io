@@ -615,6 +615,77 @@ struct remote_codingTests {
         #expect(threeDays.uptime == "3d")
     }
 
+    // MARK: Ticket review
+
+    @MainActor
+    @Test func getTicketDiffReturnsFileDiffsWithPopulatedContent() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let diff = try await repository.getTicketDiff(publicID: "TMX-0050")
+
+        // Spec fixture: TMX-0050 carries at least one .modified and one
+        // .added FileDiff with non-empty content.
+        #expect(diff.ticketPublicId == "TMX-0050")
+        #expect(diff.files.count >= 2)
+        #expect(diff.files.contains(where: { $0.change == .modified }))
+        #expect(diff.files.contains(where: { $0.change == .added }))
+        // Non-binary text files must carry old + new content the
+        // unified-diff renderer can paint.
+        let textFiles = diff.files.filter { $0.binary != true }
+        #expect(textFiles.allSatisfy { !$0.newContent.isEmpty || $0.change == .deleted })
+    }
+
+    @MainActor
+    @Test func approveTicketFlipsStatusToDoneAndEmitsApproveActivity() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let beforeActivity = try await repository.listActivity(project: nil, feature: nil, since: nil, limit: nil)
+        let updated = try await repository.approveTicket(publicID: "TMX-0050")
+        let afterActivity = try await repository.listActivity(project: nil, feature: nil, since: nil, limit: nil)
+        let next = try await repository.getTicket(publicID: "TMX-0050")
+
+        #expect(updated.status == .done)
+        #expect(next.status == .done)
+        // ActivityEvent(kind: .approve) lands at the head of the feed.
+        #expect(afterActivity.count == beforeActivity.count + 1)
+        #expect(afterActivity.first?.kind == .approve)
+        #expect(afterActivity.first?.ticketId == 208)
+    }
+
+    @MainActor
+    @Test func requestTicketChangesKeepsStatusInReviewAndCarriesCommentIntoActivity() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let updated = try await repository.requestTicketChanges(
+            publicID: "TMX-0051",
+            comment: "Tighten copy on the empty state."
+        )
+        let activity = try await repository.listActivity(project: nil, feature: nil, since: nil, limit: nil)
+
+        // Spec: status stays in .review — agent pushes more commits to
+        // the same branch.
+        #expect(updated.status == .review)
+        #expect(activity.first?.kind == .review)
+        #expect(activity.first?.detail == "Tighten copy on the empty state.")
+    }
+
+    @MainActor
+    @Test func sendTicketBackDropsStatusToDoingAndEmitsCheckActivity() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let updated = try await repository.sendTicketBack(
+            publicID: "TMX-0050",
+            comment: "Diff viewer needs a unified mode."
+        )
+        let activity = try await repository.listActivity(project: nil, feature: nil, since: nil, limit: nil)
+
+        // Spec: drops back to .doing — the review failed and more work
+        // is needed on the original branch.
+        #expect(updated.status == .doing)
+        #expect(activity.first?.kind == .check)
+        #expect(activity.first?.detail == "Diff viewer needs a unified mode.")
+    }
+
     // MARK: Local project notes
 
     @MainActor

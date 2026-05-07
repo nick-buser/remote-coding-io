@@ -23,6 +23,7 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
     private var nextActivityEventID: Int64
     private var agentSessions: [Components.Schemas.AgentSession]
     private var nextAgentSessionID: Int64
+    private var ticketDiffsByPublicID: [String: Components.Schemas.TicketDiff]
     // Tickets are stored without their inline `criteria` array; the
     // single-ticket GET attaches criteria from `criteriaByTicketID` so
     // listTickets can match the contract (criteria omitted) without a
@@ -82,6 +83,7 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
         let agentSessionSeed = Self.seedAgentSessions()
         agentSessions = agentSessionSeed.sessions
         nextAgentSessionID = agentSessionSeed.nextID
+        ticketDiffsByPublicID = Self.seedTicketDiffs()
 
         let seed = Self.seedTickets()
         tickets = seed.tickets
@@ -516,6 +518,88 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "-", with: "_")
             .replacingOccurrences(of: " ", with: "_")
+    }
+
+    // MARK: Ticket review
+
+    func getTicketDiff(publicID: String) async throws -> Components.Schemas.TicketDiff {
+        guard let diff = ticketDiffsByPublicID[publicID] else {
+            throw MockRepositoryError.notFound
+        }
+        return diff
+    }
+
+    func approveTicket(publicID: String) async throws -> Components.Schemas.Ticket {
+        guard let index = tickets.firstIndex(where: { $0.publicId == publicID }) else {
+            throw MockRepositoryError.notFound
+        }
+        tickets[index].status = .done
+        tickets[index].updatedAt = Date()
+        emitReviewActivity(ticket: tickets[index], kind: .approve, detail: "Approved")
+        var updated = tickets[index]
+        updated.criteria = sortedCriteria(forTicketID: updated.id)
+        return updated
+    }
+
+    func requestTicketChanges(publicID: String, comment: String?) async throws -> Components.Schemas.Ticket {
+        guard let index = tickets.firstIndex(where: { $0.publicId == publicID }) else {
+            throw MockRepositoryError.notFound
+        }
+        // Spec: stays in `review` — the reviewer wants the agent to push
+        // more commits onto the same branch, not redo the whole ticket.
+        tickets[index].status = .review
+        tickets[index].updatedAt = Date()
+        emitReviewActivity(ticket: tickets[index], kind: .review,
+                           detail: comment ?? "Requested changes")
+        var updated = tickets[index]
+        updated.criteria = sortedCriteria(forTicketID: updated.id)
+        return updated
+    }
+
+    func sendTicketBack(publicID: String, comment: String?) async throws -> Components.Schemas.Ticket {
+        guard let index = tickets.firstIndex(where: { $0.publicId == publicID }) else {
+            throw MockRepositoryError.notFound
+        }
+        // Spec: drops back to `doing` — the review failed and more work
+        // is needed on the original branch.
+        tickets[index].status = .doing
+        tickets[index].updatedAt = Date()
+        emitReviewActivity(ticket: tickets[index], kind: .check,
+                           detail: comment ?? "Sent back")
+        var updated = tickets[index]
+        updated.criteria = sortedCriteria(forTicketID: updated.id)
+        return updated
+    }
+
+    private func emitReviewActivity(
+        ticket: Components.Schemas.Ticket,
+        kind: Components.Schemas.ActivityKind,
+        detail: String
+    ) {
+        let feature = features.first(where: { $0.id == ticket.featureId })
+        let projectID = feature.flatMap { feat in
+            projects.first(where: { $0.id == feat.projectId })?.id
+        }
+        let verb: String
+        switch kind {
+        case .approve: verb = "approved"
+        case .review: verb = "requested changes"
+        case .check: verb = "sent back"
+        default: verb = "reviewed"
+        }
+        activityEvents.append(Components.Schemas.ActivityEvent(
+            id: nextActivityEventID,
+            projectId: projectID,
+            featureId: ticket.featureId,
+            ticketId: ticket.id,
+            actor: .human,
+            actorName: "you",
+            verb: verb,
+            kind: kind,
+            detail: detail,
+            createdAt: Date()
+        ))
+        nextActivityEventID += 1
     }
 
     // MARK: Local project notes
@@ -1302,5 +1386,78 @@ private extension MockTmuxAgentRepository {
         }
 
         return (sessions, sessionID)
+    }
+
+    // Seeds a fixture TicketDiff for TMX-0050 (the design's example).
+    // Two FileDiffs — one .modified, one .added — with old / new
+    // content five-plus lines apart so a unified-diff render exercises
+    // +/- and context lines plus a hunk header.
+    static func seedTicketDiffs() -> [String: Components.Schemas.TicketDiff] {
+        let modifiedOld = """
+        struct DiffViewer: View {
+            let files: [FileDiff]
+            var body: some View {
+                List(files) { file in
+                    Text(file.path)
+                }
+            }
+        }
+        """
+        let modifiedNew = """
+        struct DiffViewer: View {
+            let files: [FileDiff]
+            @State private var selected: FileDiff?
+            var body: some View {
+                NavigationSplitView {
+                    List(files, selection: $selected) { file in
+                        DiffFileRow(file: file)
+                    }
+                } detail: {
+                    if let file = selected {
+                        DiffPaneView(file: file)
+                    } else {
+                        ContentUnavailableView("Pick a file", systemImage: "doc.text")
+                    }
+                }
+            }
+        }
+        """
+        let addedNew = """
+        struct DiffPaneView: View {
+            let file: FileDiff
+            var body: some View {
+                ScrollView {
+                    UnifiedDiffText(old: file.oldContent, new: file.newContent)
+                        .font(.system(.body, design: .monospaced))
+                        .padding()
+                }
+                .navigationTitle(file.path)
+            }
+        }
+        """
+        let diff = Components.Schemas.TicketDiff(
+            ticketPublicId: "TMX-0050",
+            base: "main",
+            branch: "feat/tmx-0050-diff-viewer",
+            files: [
+                Components.Schemas.FileDiff(
+                    path: "remote-coding/Features/Review/DiffViewer.swift",
+                    oldPath: nil,
+                    change: .modified,
+                    binary: false,
+                    oldContent: modifiedOld,
+                    newContent: modifiedNew
+                ),
+                Components.Schemas.FileDiff(
+                    path: "remote-coding/Features/Review/DiffPaneView.swift",
+                    oldPath: nil,
+                    change: .added,
+                    binary: false,
+                    oldContent: "",
+                    newContent: addedNew
+                )
+            ]
+        )
+        return ["TMX-0050": diff]
     }
 }
