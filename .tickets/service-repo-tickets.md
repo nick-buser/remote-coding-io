@@ -1,8 +1,8 @@
 ---
 prefix: service
 title: Add Ticket and AcceptanceCriterion repository methods
-status: todo
-branch:
+status: active
+branch: service-0007
 ---
 
 ## Description
