@@ -136,6 +136,150 @@ final class LiveTmuxAgentRepository: TmuxAgentRepository {
         }
     }
 
+    // MARK: Tickets
+
+    func listTickets(featureID: Int64, status: Components.Schemas.TicketStatus?) async throws -> [Components.Schemas.Ticket] {
+        let output = try await client.listTickets(.init(
+            path: .init(id: featureID),
+            query: .init(status: status)
+        ))
+        switch output {
+        case .ok(let response):
+            return try response.body.json
+        case .badRequest(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .notFound(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .serviceUnavailable(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .undocumented(let statusCode, _):
+            throw RepositoryError.http(statusCode)
+        }
+    }
+
+    func getTicket(publicID: String) async throws -> Components.Schemas.Ticket {
+        let output = try await client.getTicket(.init(path: .init(publicId: publicID)))
+        switch output {
+        case .ok(let response):
+            return try response.body.json
+        case .notFound(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .serviceUnavailable(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .undocumented(let statusCode, _):
+            throw RepositoryError.http(statusCode)
+        }
+    }
+
+    func createTicket(featureID: Int64, body: Components.Schemas.CreateTicketRequest) async throws -> Components.Schemas.Ticket {
+        let output = try await client.createTicket(.init(
+            path: .init(id: featureID),
+            body: .json(body)
+        ))
+        switch output {
+        case .created(let response):
+            return try response.body.json
+        case .badRequest(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .notFound(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .conflict(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .serviceUnavailable(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .undocumented(let statusCode, _):
+            throw RepositoryError.http(statusCode)
+        }
+    }
+
+    func updateTicket(publicID: String, body: Components.Schemas.UpdateTicketRequest) async throws -> Components.Schemas.Ticket {
+        let output = try await client.updateTicket(.init(
+            path: .init(publicId: publicID),
+            body: .json(body)
+        ))
+        switch output {
+        case .ok(let response):
+            return try response.body.json
+        case .badRequest(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .notFound(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .serviceUnavailable(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .undocumented(let statusCode, _):
+            throw RepositoryError.http(statusCode)
+        }
+    }
+
+    // MARK: Acceptance criteria
+
+    func listCriteria(ticketPublicID: String) async throws -> [Components.Schemas.AcceptanceCriterion] {
+        let output = try await client.listTicketCriteria(.init(path: .init(publicId: ticketPublicID)))
+        switch output {
+        case .ok(let response):
+            let criteria = try response.body.json
+            return criteria.sorted { $0.sortOrder < $1.sortOrder }
+        case .notFound(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .serviceUnavailable(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .undocumented(let statusCode, _):
+            throw RepositoryError.http(statusCode)
+        }
+    }
+
+    func createCriterion(ticketPublicID: String, body: Components.Schemas.CreateAcceptanceCriterionRequest) async throws -> Components.Schemas.AcceptanceCriterion {
+        let output = try await client.createTicketCriterion(.init(
+            path: .init(publicId: ticketPublicID),
+            body: .json(body)
+        ))
+        switch output {
+        case .created(let response):
+            return try response.body.json
+        case .badRequest(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .notFound(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .serviceUnavailable(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .undocumented(let statusCode, _):
+            throw RepositoryError.http(statusCode)
+        }
+    }
+
+    func updateCriterion(id: Int64, body: Components.Schemas.UpdateAcceptanceCriterionRequest) async throws -> Components.Schemas.AcceptanceCriterion {
+        let output = try await client.updateCriterion(.init(
+            path: .init(id: id),
+            body: .json(body)
+        ))
+        switch output {
+        case .ok(let response):
+            return try response.body.json
+        case .badRequest(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .notFound(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .serviceUnavailable(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .undocumented(let statusCode, _):
+            throw RepositoryError.http(statusCode)
+        }
+    }
+
+    func deleteCriterion(id: Int64) async throws {
+        let output = try await client.deleteCriterion(.init(path: .init(id: id)))
+        switch output {
+        case .noContent:
+            return
+        case .notFound(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .serviceUnavailable(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .undocumented(let statusCode, _):
+            throw RepositoryError.http(statusCode)
+        }
+    }
+
     // MARK: Documents (not exposed by the contract yet)
 
     func listProjectDocuments(projectID: Int64) async throws -> [WorkspaceDocument] { [] }
