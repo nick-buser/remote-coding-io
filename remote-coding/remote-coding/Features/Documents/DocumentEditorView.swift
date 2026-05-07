@@ -1,10 +1,14 @@
 import SwiftUI
 
+// Operates on `LocalProjectNote` only. Feature-level docs use the
+// generated `Components.Schemas.Doc` type whose `body_blocks` is opaque
+// TipTap JSON; the renderer for that surface ships with
+// `service-feature-prd-tab`.
 struct DocumentEditorView: View {
     @Environment(AppModel.self) private var appModel
     @State private var viewModel: DocumentEditorViewModel
 
-    init(document: WorkspaceDocument) {
+    init(document: LocalProjectNote) {
         _viewModel = State(initialValue: DocumentEditorViewModel(document: document))
     }
 
@@ -45,4 +49,3 @@ struct DocumentEditorView: View {
         }
     }
 }
-

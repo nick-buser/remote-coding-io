@@ -4,12 +4,12 @@ import Observation
 @MainActor
 @Observable
 final class DocumentEditorViewModel {
-    var document: WorkspaceDocument
+    var document: LocalProjectNote
     var draft: String
     var isSaving = false
     var errorMessage: String?
 
-    init(document: WorkspaceDocument) {
+    init(document: LocalProjectNote) {
         self.document = document
         draft = document.body
     }
@@ -32,4 +32,3 @@ final class DocumentEditorViewModel {
         isSaving = false
     }
 }
-

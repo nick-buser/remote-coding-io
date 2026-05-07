@@ -74,8 +74,8 @@ struct ProjectDetailView: View {
                 Label("Open Session", systemImage: "terminal")
             }
         }
-        .navigationDestination(for: WorkspaceDocument.self) { document in
-            DocumentEditorView(document: document)
+        .navigationDestination(for: LocalProjectNote.self) { note in
+            DocumentEditorView(document: note)
         }
     }
 
@@ -115,9 +115,9 @@ struct ProjectDetailView: View {
 
     private var documentRows: some View {
         Section("Documents") {
-            ForEach(viewModel.documents) { document in
-                NavigationLink(value: document) {
-                    Label(document.title, systemImage: document.kind.systemImage)
+            ForEach(viewModel.notes) { note in
+                NavigationLink(value: note) {
+                    Label(note.title, systemImage: note.kind.systemImage)
                 }
             }
         }

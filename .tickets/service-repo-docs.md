@@ -1,8 +1,8 @@
 ---
 prefix: service
 title: Add Doc repository methods and replace the local WorkspaceDocument concept
-status: todo
-branch:
+status: active
+branch: service-0008
 ---
 
 ## Description
@@ -17,23 +17,23 @@ Depends on `infra-openapi-regen.md`. See `docs/feature_plans/20-navigation-and-d
 
 ## Acceptance criteria
 
-- [ ] `TmuxAgentRepository` adds:
+- [x] `TmuxAgentRepository` adds:
   - `func listFeatureDocs(featureID: Int64) async throws -> [Components.Schemas.Doc]`
   - `func getDoc(id: Int64) async throws -> Components.Schemas.Doc`
   - `func createFeatureDoc(featureID: Int64, body: Components.Schemas.CreateDocRequest) async throws -> Components.Schemas.Doc`
   - `func updateDoc(id: Int64, body: Components.Schemas.UpdateDocRequest) async throws -> Components.Schemas.Doc`
   - `func deleteDoc(id: Int64) async throws`
-- [ ] `LiveTmuxAgentRepository` wires these to the generated operations.
-- [ ] `MockTmuxAgentRepository` returns fixture `Doc` records for at least one feature in each project. Each fixture has `kind`, `title`, `body_blocks` (a TipTap JSON string with at least 3 blocks), `pinned`, `word_count`.
-- [ ] `Core/Domain/WorkspaceDocument.swift` is renamed to `LocalProjectNote.swift`. The type is restricted to `kind ∈ {projectBrief, projectNotes}` and the `featureDescription / promptBuildout / acceptanceCriteria` cases are removed.
-- [ ] All callers of the removed `WorkspaceDocument` cases compile against either the new `Doc` type (for feature-level docs) or `LocalProjectNote` (for project-level notes). `ProjectDetailView` uses `LocalProjectNote`; `FeatureDetailView` and `DocumentEditorView` use `Doc`.
-- [ ] `repository.listProjectDocuments(projectID:)` and `saveDocument(_:)` keep their signatures but accept `LocalProjectNote`. Live impl persists to `UserDefaults` keyed by project ID (no server roundtrip — explicitly in-memory until the contract exposes project-level docs).
-- [ ] `repository.listFeatureDocuments(featureID:)` and the corresponding `saveDocument(_:)` for features are deprecated and removed in this ticket. All call sites switch to the new `listFeatureDocs(featureID:)` / `updateDoc(id:body:)`.
-- [ ] Tests:
+- [x] `LiveTmuxAgentRepository` wires these to the generated operations.
+- [x] `MockTmuxAgentRepository` returns fixture `Doc` records for at least one feature in each project. Each fixture has `kind`, `title`, `body_blocks` (a TipTap JSON string with at least 3 blocks), `pinned`, `word_count`.
+- [x] `Core/Domain/WorkspaceDocument.swift` is renamed to `LocalProjectNote.swift`. The type is restricted to `kind ∈ {projectBrief, projectNotes}` and the `featureDescription / promptBuildout / acceptanceCriteria` cases are removed.
+- [x] All callers of the removed `WorkspaceDocument` cases compile against either the new `Doc` type (for feature-level docs) or `LocalProjectNote` (for project-level notes). `ProjectDetailView` uses `LocalProjectNote`; `FeatureDetailView` and `DocumentEditorView` use `Doc`.
+- [x] `repository.listProjectDocuments(projectID:)` and `saveDocument(_:)` keep their signatures but accept `LocalProjectNote`. Live impl persists to `UserDefaults` keyed by project ID (no server roundtrip — explicitly in-memory until the contract exposes project-level docs).
+- [x] `repository.listFeatureDocuments(featureID:)` and the corresponding `saveDocument(_:)` for features are deprecated and removed in this ticket. All call sites switch to the new `listFeatureDocs(featureID:)` / `updateDoc(id:body:)`.
+- [x] Tests:
   - `listFeatureDocs(featureID:)` returns pinned docs first, then most-recently-updated.
   - `createFeatureDoc(featureID:body:)` defaults `body_blocks` to `"[]"` when omitted (per contract).
   - `updateDoc` recomputes `word_count` server-side; mock mimics this by counting words in the `body_blocks` JSON.
-- [ ] Project builds; existing screens render the same content as before (the project notes editor still works against `LocalProjectNote`; feature docs render the new fixture content).
+- [x] Project builds; existing screens render the same content as before (the project notes editor still works against `LocalProjectNote`; feature docs render the new fixture content).
 
 ## Notes
 

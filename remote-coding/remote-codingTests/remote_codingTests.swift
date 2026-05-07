@@ -254,6 +254,138 @@ struct remote_codingTests {
         #expect(ticket.criteriaTotal == initial.count - 1)
     }
 
+    // MARK: Feature docs
+
+    @MainActor
+    @Test func listFeatureDocsReturnsPinnedFirstThenMostRecentlyUpdated() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let docs = try await repository.listFeatureDocs(featureID: 12)
+
+        // Feature 12 seeds with one pinned PRD; it must lead the list. The
+        // remaining docs follow updatedAt desc.
+        #expect(docs.count == 3)
+        #expect(docs.first?.pinned == true)
+        #expect(docs.first?.kind == .prd)
+        let tail = docs.dropFirst()
+        let tailDates = tail.map(\.updatedAt)
+        #expect(tailDates == tailDates.sorted(by: >))
+    }
+
+    @MainActor
+    @Test func createFeatureDocDefaultsBodyBlocksToEmptyJSONArrayWhenOmitted() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let body = Components.Schemas.CreateDocRequest(
+            kind: .notes,
+            title: "Drafted from the inbox",
+            bodyBlocks: nil,
+            pinned: nil
+        )
+        let created = try await repository.createFeatureDoc(featureID: 21, body: body)
+
+        // Spec: bodyBlocks defaults to "[]" when omitted on create.
+        #expect(created.bodyBlocks == "[]")
+        #expect(created.pinned == false)
+        // Word count is recomputed on create as well.
+        #expect(created.wordCount == 0)
+        // Created doc appears in subsequent list calls.
+        let after = try await repository.listFeatureDocs(featureID: 21)
+        #expect(after.contains(where: { $0.id == created.id }))
+    }
+
+    @MainActor
+    @Test func updateDocRecomputesWordCountFromBodyBlocks() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let initial = try await repository.listFeatureDocs(featureID: 11).first!
+        let body = Components.Schemas.UpdateDocRequest(
+            kind: nil,
+            title: nil,
+            bodyBlocks: "one two three four five",
+            pinned: nil
+        )
+        let updated = try await repository.updateDoc(id: initial.id, body: body)
+
+        // Mock mimics the contract — server-side word_count is re-derived
+        // from body_blocks on PATCH. Five space-separated tokens => 5.
+        #expect(updated.wordCount == 5)
+        #expect(updated.bodyBlocks == "one two three four five")
+        // Subsequent get sees the new word_count, not the seed value.
+        let next = try await repository.getDoc(id: initial.id)
+        #expect(next.wordCount == 5)
+    }
+
+    @MainActor
+    @Test func deleteDocRemovesFromList() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let initial = try await repository.listFeatureDocs(featureID: 21)
+        let target = initial.first!
+        try await repository.deleteDoc(id: target.id)
+        let after = try await repository.listFeatureDocs(featureID: 21)
+
+        #expect(after.contains(where: { $0.id == target.id }) == false)
+        #expect(after.count == initial.count - 1)
+    }
+
+    // MARK: Local project notes
+
+    @MainActor
+    @Test func listProjectDocumentsReturnsSeededLocalNotesScopedByProject() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let onProject1 = try await repository.listProjectDocuments(projectID: 1)
+        let onProject2 = try await repository.listProjectDocuments(projectID: 2)
+
+        #expect(onProject1.map(\.kind).sorted(by: { $0.rawValue < $1.rawValue }) == [.projectBrief, .projectNotes])
+        #expect(onProject2.isEmpty)
+    }
+
+    @MainActor
+    @Test func saveLocalProjectNoteRoundTripsThroughList() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let initial = try await repository.listProjectDocuments(projectID: 1)
+        let target = initial.first(where: { $0.kind == .projectBrief })!
+        var edited = target
+        edited.body = "Tightened brief — sessions are persistent agent records."
+        let saved = try await repository.saveDocument(edited)
+        let after = try await repository.listProjectDocuments(projectID: 1)
+
+        #expect(saved.body == edited.body)
+        #expect(saved.updatedAt > target.updatedAt)
+        #expect(after.first(where: { $0.id == target.id })?.body == edited.body)
+    }
+
+    @MainActor
+    @Test func localProjectNoteStorePersistsAcrossInstances() throws {
+        let suiteName = "LocalProjectNoteStoreTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = LocalProjectNoteStore(userDefaults: defaults)
+        let note = LocalProjectNote(
+            id: "fresh-brief",
+            projectID: 9,
+            kind: .projectBrief,
+            title: "Fresh",
+            body: "Body",
+            updatedAt: Date(timeIntervalSince1970: 0)
+        )
+        let saved = store.save(note)
+        let other = LocalProjectNoteStore(userDefaults: defaults)
+
+        // A second store reading the same defaults sees the saved note.
+        let listed = other.list(projectID: 9)
+        #expect(listed.count == 1)
+        #expect(listed.first?.id == "fresh-brief")
+        #expect(listed.first?.body == "Body")
+        // saveDocument bumps updatedAt; the persisted record reflects the
+        // bumped value, not the input.
+        #expect(saved.updatedAt > Date(timeIntervalSince1970: 0))
+    }
+
     // MARK: Sessions
 
     @MainActor
