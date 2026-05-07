@@ -15,6 +15,17 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
     // field onto the project type.
     private var tmuxSessionByProjectID: [Int64: String]
     private var documents: [WorkspaceDocument]
+    // Tickets are stored without their inline `criteria` array; the
+    // single-ticket GET attaches criteria from `criteriaByTicketID` so
+    // listTickets can match the contract (criteria omitted) without a
+    // second representation.
+    private var tickets: [Components.Schemas.Ticket]
+    private var criteriaByTicketID: [Int64: [Components.Schemas.AcceptanceCriterion]]
+    private var nextTicketID: Int64
+    private var nextCriterionID: Int64
+    // Next public-id suffix to issue from createTicket. Seeded one past
+    // the highest fixture so generated TMX-#### values don't collide.
+    private var nextTicketPublicSequence: Int
     private(set) var sentInputs: [SentInput] = []
 
     init() {
@@ -51,6 +62,13 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
         ]
 
         documents = Self.seedDocuments
+
+        let seed = Self.seedTickets()
+        tickets = seed.tickets
+        criteriaByTicketID = seed.criteria
+        nextTicketID = seed.nextTicketID
+        nextCriterionID = seed.nextCriterionID
+        nextTicketPublicSequence = seed.nextPublicSequence
     }
 
     func listProjects() async throws -> [Components.Schemas.Project] {
@@ -105,6 +123,141 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
         }
         features[index].status = body.status
         return features[index]
+    }
+
+    // MARK: Tickets
+
+    func listTickets(featureID: Int64, status: Components.Schemas.TicketStatus?) async throws -> [Components.Schemas.Ticket] {
+        tickets
+            .filter { $0.featureId == featureID }
+            .filter { status == nil || $0.status == status }
+            .map(strippingCriteria)
+    }
+
+    func getTicket(publicID: String) async throws -> Components.Schemas.Ticket {
+        guard let ticket = tickets.first(where: { $0.publicId == publicID }) else {
+            throw MockRepositoryError.notFound
+        }
+        var attached = ticket
+        attached.criteria = sortedCriteria(forTicketID: ticket.id)
+        return attached
+    }
+
+    func createTicket(featureID: Int64, body: Components.Schemas.CreateTicketRequest) async throws -> Components.Schemas.Ticket {
+        guard features.contains(where: { $0.id == featureID }) else {
+            throw MockRepositoryError.notFound
+        }
+        let now = Date()
+        let publicID = String(format: "TMX-%04d", nextTicketPublicSequence)
+        nextTicketPublicSequence += 1
+        let ticket = Components.Schemas.Ticket(
+            id: nextTicketID,
+            publicId: publicID,
+            featureId: featureID,
+            title: body.title,
+            description: body.description ?? "",
+            status: body.status ?? .todo,
+            estimate: body.estimate ?? "",
+            branchName: body.branchName ?? "",
+            criteria: nil,
+            criteriaTotal: 0,
+            criteriaDone: 0,
+            createdAt: now,
+            updatedAt: now
+        )
+        nextTicketID += 1
+        tickets.append(ticket)
+        criteriaByTicketID[ticket.id] = []
+        return ticket
+    }
+
+    func updateTicket(publicID: String, body: Components.Schemas.UpdateTicketRequest) async throws -> Components.Schemas.Ticket {
+        guard let index = tickets.firstIndex(where: { $0.publicId == publicID }) else {
+            throw MockRepositoryError.notFound
+        }
+        if let title = body.title { tickets[index].title = title }
+        if let description = body.description { tickets[index].description = description }
+        if let status = body.status { tickets[index].status = status }
+        if let estimate = body.estimate { tickets[index].estimate = estimate }
+        tickets[index].updatedAt = Date()
+        var updated = tickets[index]
+        updated.criteria = sortedCriteria(forTicketID: updated.id)
+        return updated
+    }
+
+    // MARK: Acceptance criteria
+
+    func listCriteria(ticketPublicID: String) async throws -> [Components.Schemas.AcceptanceCriterion] {
+        guard let ticket = tickets.first(where: { $0.publicId == ticketPublicID }) else {
+            throw MockRepositoryError.notFound
+        }
+        return sortedCriteria(forTicketID: ticket.id)
+    }
+
+    func createCriterion(ticketPublicID: String, body: Components.Schemas.CreateAcceptanceCriterionRequest) async throws -> Components.Schemas.AcceptanceCriterion {
+        guard let ticketIndex = tickets.firstIndex(where: { $0.publicId == ticketPublicID }) else {
+            throw MockRepositoryError.notFound
+        }
+        let ticketID = tickets[ticketIndex].id
+        let existing = criteriaByTicketID[ticketID] ?? []
+        let appendedSortOrder = (existing.map { $0.sortOrder }.max() ?? -1) + 1
+        let now = Date()
+        let criterion = Components.Schemas.AcceptanceCriterion(
+            id: nextCriterionID,
+            ticketId: ticketID,
+            text: body.text,
+            done: body.done ?? false,
+            sortOrder: body.sortOrder ?? appendedSortOrder,
+            createdAt: now,
+            updatedAt: now
+        )
+        nextCriterionID += 1
+        criteriaByTicketID[ticketID, default: []].append(criterion)
+        recomputeCriteriaCounts(for: ticketID)
+        return criterion
+    }
+
+    func updateCriterion(id: Int64, body: Components.Schemas.UpdateAcceptanceCriterionRequest) async throws -> Components.Schemas.AcceptanceCriterion {
+        for (ticketID, list) in criteriaByTicketID {
+            guard let index = list.firstIndex(where: { $0.id == id }) else { continue }
+            var criterion = list[index]
+            if let text = body.text { criterion.text = text }
+            if let done = body.done { criterion.done = done }
+            if let sortOrder = body.sortOrder { criterion.sortOrder = sortOrder }
+            criterion.updatedAt = Date()
+            criteriaByTicketID[ticketID]?[index] = criterion
+            recomputeCriteriaCounts(for: ticketID)
+            return criterion
+        }
+        throw MockRepositoryError.notFound
+    }
+
+    func deleteCriterion(id: Int64) async throws {
+        for (ticketID, list) in criteriaByTicketID {
+            guard let index = list.firstIndex(where: { $0.id == id }) else { continue }
+            criteriaByTicketID[ticketID]?.remove(at: index)
+            recomputeCriteriaCounts(for: ticketID)
+            return
+        }
+        throw MockRepositoryError.notFound
+    }
+
+    private func sortedCriteria(forTicketID ticketID: Int64) -> [Components.Schemas.AcceptanceCriterion] {
+        (criteriaByTicketID[ticketID] ?? []).sorted { $0.sortOrder < $1.sortOrder }
+    }
+
+    private func strippingCriteria(_ ticket: Components.Schemas.Ticket) -> Components.Schemas.Ticket {
+        var copy = ticket
+        copy.criteria = nil
+        return copy
+    }
+
+    private func recomputeCriteriaCounts(for ticketID: Int64) {
+        guard let index = tickets.firstIndex(where: { $0.id == ticketID }) else { return }
+        let list = criteriaByTicketID[ticketID] ?? []
+        tickets[index].criteriaTotal = list.count
+        tickets[index].criteriaDone = list.filter { $0.done }.count
+        tickets[index].updatedAt = Date()
     }
 
     func listProjectDocuments(projectID: Int64) async throws -> [WorkspaceDocument] {
@@ -440,6 +593,145 @@ private extension MockTmuxAgentRepository {
       "content": "$ xcodebuild build-for-testing ...\\n** TEST BUILD SUCCEEDED **\\n\\nReady to refine project-scoped pane routing. "
     }
     """
+
+    // Tickets are seeded from the design fixtures
+    // (claude_design_references/.../data.jsx, TMX-0042..TMX-0070), remapped
+    // onto the existing mock features 11 / 12 / 21. The design's FEAT-018
+    // tmux-pane tickets land on feature 11 (Session stream and pane input);
+    // FEAT-019 context tickets land on feature 12 (Mobile client planning);
+    // FEAT-020 review tickets land on feature 21 (Project hierarchy
+    // prototype). One ticket is `done` so the status filter test sees all
+    // four states. service-mock-rich-seed is the eventual replacement that
+    // will rebuild fixtures one-for-one with the design.
+    static func seedTickets() -> (
+        tickets: [Components.Schemas.Ticket],
+        criteria: [Int64: [Components.Schemas.AcceptanceCriterion]],
+        nextTicketID: Int64,
+        nextCriterionID: Int64,
+        nextPublicSequence: Int
+    ) {
+        struct Spec {
+            let publicID: String
+            let featureID: Int64
+            let title: String
+            let description: String
+            let status: Components.Schemas.TicketStatus
+            let estimate: String
+            let branchName: String
+            let criteriaCount: Int
+            let criteriaDone: Int
+            let hoursAgo: Double
+        }
+        let specs: [Spec] = [
+            Spec(publicID: "TMX-0042", featureID: 11, title: "Pane registry + lifecycle hooks",
+                 description: "Track every spawned pane in a registry that fires lifecycle hooks on attach, detach, and exit.",
+                 status: .doing, estimate: "M", branchName: "feat/tmx-0042-pane-registry",
+                 criteriaCount: 4, criteriaDone: 2, hoursAgo: 0.2),
+            Spec(publicID: "TMX-0043", featureID: 11, title: "Split layout grammar (h/v/grid)",
+                 description: "Define a tiny grammar for splitting panes horizontally, vertically, or into a grid.",
+                 status: .doing, estimate: "L", branchName: "feat/tmx-0043-split-grammar",
+                 criteriaCount: 5, criteriaDone: 3, hoursAgo: 0.6),
+            Spec(publicID: "TMX-0044", featureID: 11, title: "Per-pane status badge stream",
+                 description: "Stream per-pane status (idle, busy, awaiting-input) so badges stay in sync without polling.",
+                 status: .review, estimate: "S", branchName: "feat/tmx-0044-status-badge",
+                 criteriaCount: 3, criteriaDone: 3, hoursAgo: 1),
+            Spec(publicID: "TMX-0045", featureID: 11, title: "Scrollback search (regex + jump)",
+                 description: "Regex-aware scrollback search with jump-to-match navigation.",
+                 status: .todo, estimate: "M", branchName: "",
+                 criteriaCount: 4, criteriaDone: 0, hoursAgo: 24),
+            Spec(publicID: "TMX-0046", featureID: 11, title: "Keyboard map: pane navigation",
+                 description: "Bind pane navigation to a keyboard map that respects the user's existing chord layout.",
+                 status: .todo, estimate: "S", branchName: "",
+                 criteriaCount: 3, criteriaDone: 0, hoursAgo: 24),
+            Spec(publicID: "TMX-0047", featureID: 12, title: "Context bundle schema",
+                 description: "Schema for the context bundle each session ships to the agent on resume.",
+                 status: .doing, estimate: "M", branchName: "feat/tmx-0047-context-bundle",
+                 criteriaCount: 5, criteriaDone: 4, hoursAgo: 1),
+            Spec(publicID: "TMX-0048", featureID: 12, title: "PRD/notes resolver per session",
+                 description: "Resolve the right PRD and notes for a session based on its ticket and feature.",
+                 status: .doing, estimate: "M", branchName: "feat/tmx-0048-prd-resolver",
+                 criteriaCount: 4, criteriaDone: 1, hoursAgo: 3),
+            Spec(publicID: "TMX-0049", featureID: 12, title: "Resume hook: re-inject context",
+                 description: "When a session resumes, re-inject the context bundle into the agent's prompt.",
+                 status: .todo, estimate: "S", branchName: "",
+                 criteriaCount: 3, criteriaDone: 0, hoursAgo: 48),
+            Spec(publicID: "TMX-0050", featureID: 21, title: "Diff viewer component",
+                 description: "Side-by-side diff viewer with line-level highlighting.",
+                 status: .review, estimate: "L", branchName: "feat/tmx-0050-diff-viewer",
+                 criteriaCount: 6, criteriaDone: 6, hoursAgo: 3),
+            Spec(publicID: "TMX-0051", featureID: 21, title: "Acceptance checklist binding",
+                 description: "Bind the acceptance checklist to the diff so reviewers can tick items as they read.",
+                 status: .review, estimate: "S", branchName: "feat/tmx-0051-checklist",
+                 criteriaCount: 4, criteriaDone: 4, hoursAgo: 4),
+            Spec(publicID: "TMX-0052", featureID: 21, title: "Approve / request-changes actions",
+                 description: "Reviewer actions: approve, request changes, send back to doing.",
+                 status: .doing, estimate: "S", branchName: "feat/tmx-0052-review-actions",
+                 criteriaCount: 3, criteriaDone: 2, hoursAgo: 6),
+            Spec(publicID: "TMX-0061", featureID: 12, title: "Lex tokens + grammar",
+                 description: "Lex query tokens and define the grammar for the saved-query DSL.",
+                 status: .done, estimate: "M", branchName: "feat/tmx-0061-lex",
+                 criteriaCount: 4, criteriaDone: 4, hoursAgo: 48),
+            Spec(publicID: "TMX-0062", featureID: 12, title: "Autocomplete provider",
+                 description: "Autocomplete suggestions for query operators and field names.",
+                 status: .todo, estimate: "S", branchName: "",
+                 criteriaCount: 3, criteriaDone: 0, hoursAgo: 72),
+            Spec(publicID: "TMX-0063", featureID: 12, title: "Saved-query store",
+                 description: "Persist saved queries and surface them in the autocomplete history list.",
+                 status: .todo, estimate: "S", branchName: "",
+                 criteriaCount: 3, criteriaDone: 0, hoursAgo: 96),
+            Spec(publicID: "TMX-0070", featureID: 21, title: "Hover popover component",
+                 description: "Reusable hover popover used by the diff viewer's annotations.",
+                 status: .todo, estimate: "S", branchName: "",
+                 criteriaCount: 2, criteriaDone: 0, hoursAgo: 144)
+        ]
+
+        var tickets: [Components.Schemas.Ticket] = []
+        var criteria: [Int64: [Components.Schemas.AcceptanceCriterion]] = [:]
+        var ticketID: Int64 = 200
+        var criterionID: Int64 = 1000
+        let now = Date()
+
+        for spec in specs {
+            let updatedAt = now.addingTimeInterval(-spec.hoursAgo * 3600)
+            let createdAt = updatedAt.addingTimeInterval(-72 * 3600)
+
+            var ticketCriteria: [Components.Schemas.AcceptanceCriterion] = []
+            for index in 0..<spec.criteriaCount {
+                let isDone = index < spec.criteriaDone
+                ticketCriteria.append(Components.Schemas.AcceptanceCriterion(
+                    id: criterionID,
+                    ticketId: ticketID,
+                    text: "\(spec.title) — step \(index + 1)",
+                    done: isDone,
+                    sortOrder: index,
+                    createdAt: createdAt,
+                    updatedAt: updatedAt
+                ))
+                criterionID += 1
+            }
+
+            tickets.append(Components.Schemas.Ticket(
+                id: ticketID,
+                publicId: spec.publicID,
+                featureId: spec.featureID,
+                title: spec.title,
+                description: spec.description,
+                status: spec.status,
+                estimate: spec.estimate,
+                branchName: spec.branchName,
+                criteria: nil,
+                criteriaTotal: ticketCriteria.count,
+                criteriaDone: ticketCriteria.filter { $0.done }.count,
+                createdAt: createdAt,
+                updatedAt: updatedAt
+            ))
+            criteria[ticketID] = ticketCriteria
+            ticketID += 1
+        }
+
+        // Highest seeded TMX is 0070; next created ticket starts at 0071.
+        return (tickets, criteria, ticketID, criterionID, 71)
+    }
 
     static var seedDocuments: [WorkspaceDocument] {
         [

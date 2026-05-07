@@ -7,6 +7,14 @@ protocol TmuxAgentRepository {
     func listFeatures(projectIDOrSlug: String) async throws -> [Components.Schemas.Feature]
     func getFeature(id: Int64) async throws -> Components.Schemas.Feature
     func updateFeatureStatus(id: Int64, body: Components.Schemas.UpdateFeatureStatusRequest) async throws -> Components.Schemas.Feature
+    func listTickets(featureID: Int64, status: Components.Schemas.TicketStatus?) async throws -> [Components.Schemas.Ticket]
+    func getTicket(publicID: String) async throws -> Components.Schemas.Ticket
+    func createTicket(featureID: Int64, body: Components.Schemas.CreateTicketRequest) async throws -> Components.Schemas.Ticket
+    func updateTicket(publicID: String, body: Components.Schemas.UpdateTicketRequest) async throws -> Components.Schemas.Ticket
+    func listCriteria(ticketPublicID: String) async throws -> [Components.Schemas.AcceptanceCriterion]
+    func createCriterion(ticketPublicID: String, body: Components.Schemas.CreateAcceptanceCriterionRequest) async throws -> Components.Schemas.AcceptanceCriterion
+    func updateCriterion(id: Int64, body: Components.Schemas.UpdateAcceptanceCriterionRequest) async throws -> Components.Schemas.AcceptanceCriterion
+    func deleteCriterion(id: Int64) async throws
     func listProjectDocuments(projectID: Int64) async throws -> [WorkspaceDocument]
     func listFeatureDocuments(featureID: Int64) async throws -> [WorkspaceDocument]
     func saveDocument(_ document: WorkspaceDocument) async throws -> WorkspaceDocument

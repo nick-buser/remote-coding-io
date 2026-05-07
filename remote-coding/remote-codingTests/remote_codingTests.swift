@@ -104,6 +104,156 @@ struct remote_codingTests {
         #expect(feature.health == "ok")
     }
 
+    // MARK: Tickets — list / get / create / update
+
+    @MainActor
+    @Test func listTicketsScopedToFeatureAndExcludesInlineCriteria() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let onFeature11 = try await repository.listTickets(featureID: 11, status: nil)
+        let onFeature12 = try await repository.listTickets(featureID: 12, status: nil)
+        let onFeature21 = try await repository.listTickets(featureID: 21, status: nil)
+
+        // Distribution mirrors the seed; each feature owns a known slice.
+        #expect(onFeature11.map(\.publicId).sorted() == ["TMX-0042", "TMX-0043", "TMX-0044", "TMX-0045", "TMX-0046"])
+        #expect(onFeature12.count == 6)
+        #expect(onFeature21.count == 4)
+        // Contract: list responses omit the inline `criteria` array — counts
+        // ride on criteria_total / criteria_done. getTicket is the only
+        // place criteria are populated.
+        #expect(onFeature11.allSatisfy { $0.criteria == nil })
+    }
+
+    @MainActor
+    @Test func listTicketsFiltersByStatus() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let inReview = try await repository.listTickets(featureID: 21, status: .review)
+        let done = try await repository.listTickets(featureID: 12, status: .done)
+
+        #expect(inReview.map(\.publicId).sorted() == ["TMX-0050", "TMX-0051"])
+        #expect(inReview.allSatisfy { $0.status == .review })
+        #expect(done.map(\.publicId) == ["TMX-0061"])
+    }
+
+    @MainActor
+    @Test func getTicketReturnsInlineCriteriaSortedAscending() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let ticket = try await repository.getTicket(publicID: "TMX-0042")
+
+        #expect(ticket.publicId == "TMX-0042")
+        #expect(ticket.criteria?.count == 4)
+        // Spec: AcceptanceCriterion.sortOrder is opaque to clients, but the
+        // repository must return ascending so views don't have to.
+        let orders = ticket.criteria?.map(\.sortOrder) ?? []
+        #expect(orders == orders.sorted())
+    }
+
+    @MainActor
+    @Test func createTicketIssuesUniqueTMXPublicID() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let body = Components.Schemas.CreateTicketRequest(
+            title: "Wire ticket repository surface",
+            description: "Drive the new repository methods from a screen.",
+            status: nil,
+            estimate: "S",
+            branchName: "service-0007"
+        )
+        let created = try await repository.createTicket(featureID: 21, body: body)
+
+        // Spec parameter pattern: ^TMX-[0-9]{4}$.
+        let pattern = #"^TMX-[0-9]{4}$"#
+        #expect(created.publicId.range(of: pattern, options: .regularExpression) != nil)
+        // Status defaults to .todo when the request omits it (per the
+        // generator's default + the spec).
+        #expect(created.status == .todo)
+        // Created ticket appears in subsequent list calls.
+        let listed = try await repository.listTickets(featureID: 21, status: nil)
+        #expect(listed.contains(where: { $0.publicId == created.publicId }))
+    }
+
+    @MainActor
+    @Test func updateTicketMutatesFieldsAndPersists() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let body = Components.Schemas.UpdateTicketRequest(
+            title: nil,
+            description: "Tightened scope",
+            status: .review,
+            estimate: "L"
+        )
+        let updated = try await repository.updateTicket(publicID: "TMX-0042", body: body)
+
+        #expect(updated.status == .review)
+        #expect(updated.estimate == "L")
+        #expect(updated.description == "Tightened scope")
+        let next = try await repository.getTicket(publicID: "TMX-0042")
+        #expect(next.status == .review)
+    }
+
+    // MARK: Acceptance criteria — list / create / update / delete
+
+    @MainActor
+    @Test func createCriterionAppendsToEndWhenSortOrderOmitted() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let before = try await repository.listCriteria(ticketPublicID: "TMX-0042")
+        let body = Components.Schemas.CreateAcceptanceCriterionRequest(
+            text: "Pane teardown is idempotent",
+            done: false,
+            sortOrder: nil
+        )
+        let created = try await repository.createCriterion(ticketPublicID: "TMX-0042", body: body)
+        let after = try await repository.listCriteria(ticketPublicID: "TMX-0042")
+
+        // The ticket explicitly calls this out: omitted sort_order appends.
+        #expect(created.sortOrder == (before.last?.sortOrder ?? -1) + 1)
+        #expect(after.last?.id == created.id)
+        #expect(after.count == before.count + 1)
+        // Counts on the parent ticket stay in sync.
+        let ticket = try await repository.getTicket(publicID: "TMX-0042")
+        #expect(ticket.criteriaTotal == after.count)
+    }
+
+    @MainActor
+    @Test func updateCriterionTogglesDoneAndSurfacesInListAndCounts() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let initial = try await repository.listCriteria(ticketPublicID: "TMX-0042")
+        // Seed has 4 criteria with 2 done. Flip one currently-done → not
+        // done; counts should drop and the change must surface in the next
+        // list call.
+        let target = initial.first(where: { $0.done == true })!
+        let body = Components.Schemas.UpdateAcceptanceCriterionRequest(
+            text: nil,
+            done: false,
+            sortOrder: nil
+        )
+        let updated = try await repository.updateCriterion(id: target.id, body: body)
+        let after = try await repository.listCriteria(ticketPublicID: "TMX-0042")
+        let ticket = try await repository.getTicket(publicID: "TMX-0042")
+
+        #expect(updated.done == false)
+        #expect(after.first(where: { $0.id == target.id })?.done == false)
+        #expect(ticket.criteriaDone == initial.filter { $0.done }.count - 1)
+    }
+
+    @MainActor
+    @Test func deleteCriterionRemovesAndRecomputesCounts() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let initial = try await repository.listCriteria(ticketPublicID: "TMX-0044")
+        let target = initial.first!
+        try await repository.deleteCriterion(id: target.id)
+        let after = try await repository.listCriteria(ticketPublicID: "TMX-0044")
+        let ticket = try await repository.getTicket(publicID: "TMX-0044")
+
+        #expect(after.contains(where: { $0.id == target.id }) == false)
+        #expect(ticket.criteriaTotal == initial.count - 1)
+    }
+
     // MARK: Sessions
 
     @MainActor
