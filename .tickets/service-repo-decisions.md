@@ -1,8 +1,8 @@
 ---
 prefix: service
 title: Add Decision repository methods
-status: todo
-branch:
+status: active
+branch: service-0009
 ---
 
 ## Description
@@ -13,17 +13,17 @@ Depends on `infra-openapi-regen.md`. See `docs/feature_plans/20-navigation-and-d
 
 ## Acceptance criteria
 
-- [ ] `TmuxAgentRepository` adds:
+- [x] `TmuxAgentRepository` adds:
   - `func listFeatureDecisions(featureID: Int64) async throws -> [Components.Schemas.Decision]`
   - `func createFeatureDecision(featureID: Int64, body: Components.Schemas.CreateDecisionRequest) async throws -> Components.Schemas.Decision`
   - `func deleteDecision(id: Int64) async throws`
-- [ ] `LiveTmuxAgentRepository` wires to the generated operations.
-- [ ] `MockTmuxAgentRepository` seeds 2–3 decisions per active feature, with varied actors (`human` and `agent`) and `actor_name` populated. Decisions are returned newest-first.
-- [ ] Tests:
+- [x] `LiveTmuxAgentRepository` wires to the generated operations.
+- [x] `MockTmuxAgentRepository` seeds 2–3 decisions per active feature, with varied actors (`human` and `agent`) and `actor_name` populated. Decisions are returned newest-first.
+- [x] Tests:
   - `listFeatureDecisions` returns decisions in `created_at DESC` order.
   - `createFeatureDecision` returns a record with the supplied `actor` and a server-assigned `created_at`. Mock generates a new ID.
   - `deleteDecision` removes the decision; subsequent list omits it.
-- [ ] Project builds.
+- [x] Project builds.
 
 ## Notes
 

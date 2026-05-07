@@ -17,6 +17,8 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
     private var localNotes: [LocalProjectNote]
     private var docs: [Components.Schemas.Doc]
     private var nextDocID: Int64
+    private var decisions: [Components.Schemas.Decision]
+    private var nextDecisionID: Int64
     // Tickets are stored without their inline `criteria` array; the
     // single-ticket GET attaches criteria from `criteriaByTicketID` so
     // listTickets can match the contract (criteria omitted) without a
@@ -67,6 +69,9 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
         let docSeed = Self.seedDocs()
         docs = docSeed.docs
         nextDocID = docSeed.nextDocID
+        let decisionSeed = Self.seedDecisions()
+        decisions = decisionSeed.decisions
+        nextDecisionID = decisionSeed.nextDecisionID
 
         let seed = Self.seedTickets()
         tickets = seed.tickets
@@ -331,6 +336,42 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
             throw MockRepositoryError.notFound
         }
         docs.remove(at: index)
+    }
+
+    // MARK: Feature decisions
+
+    func listFeatureDecisions(featureID: Int64) async throws -> [Components.Schemas.Decision] {
+        guard features.contains(where: { $0.id == featureID }) else {
+            throw MockRepositoryError.notFound
+        }
+        return decisions
+            .filter { $0.featureId == featureID }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    func createFeatureDecision(featureID: Int64, body: Components.Schemas.CreateDecisionRequest) async throws -> Components.Schemas.Decision {
+        guard features.contains(where: { $0.id == featureID }) else {
+            throw MockRepositoryError.notFound
+        }
+        let decision = Components.Schemas.Decision(
+            id: nextDecisionID,
+            featureId: featureID,
+            title: body.title,
+            body: body.body,
+            actor: body.actor,
+            actorName: body.actorName,
+            createdAt: Date()
+        )
+        nextDecisionID += 1
+        decisions.append(decision)
+        return decision
+    }
+
+    func deleteDecision(id: Int64) async throws {
+        guard let index = decisions.firstIndex(where: { $0.id == id }) else {
+            throw MockRepositoryError.notFound
+        }
+        decisions.remove(at: index)
     }
 
     // MARK: Local project notes
@@ -914,5 +955,74 @@ private extension MockTmuxAgentRepository {
         }
 
         return (docs, docID)
+    }
+
+    // Seeds 2–3 decisions per active feature with mixed human / agent
+    // actors so the future Decisions sub-tab has something to render and
+    // tests can exercise the actor enum. Backend emits an activity event
+    // when a Decision is created via POST /decisions; the mock does NOT
+    // chain that — service-repo-activity owns the activity surface and
+    // ships separately.
+    static func seedDecisions() -> (decisions: [Components.Schemas.Decision], nextDecisionID: Int64) {
+        struct Spec {
+            let featureID: Int64
+            let title: String
+            let body: String
+            let actor: Components.Schemas.DecisionActor
+            let actorName: String
+            let hoursAgo: Double
+        }
+        let specs: [Spec] = [
+            // Feature 11 — Session stream and pane input
+            Spec(featureID: 11,
+                 title: "Use one WebSocket per pane",
+                 body: "Multiplexing all panes onto a single socket complicates resize + reconnect. One stream per pane keeps ownership clear.",
+                 actor: .human, actorName: "Nick", hoursAgo: 2),
+            Spec(featureID: 11,
+                 title: "REST snapshot is the recovery path",
+                 body: "When the WebSocket drops we re-seed from /panes/{id}/output rather than buffering on the server.",
+                 actor: .agent, actorName: "Codex", hoursAgo: 26),
+            Spec(featureID: 11,
+                 title: "Empty-Enter is a first-class action",
+                 body: "Users send literal Enter often enough (REPL prompts, prompts waiting on confirmation) that we expose it explicitly.",
+                 actor: .human, actorName: "Nick", hoursAgo: 96),
+            // Feature 12 — Mobile client planning
+            Spec(featureID: 12,
+                 title: "Terminal is a drill-down, not a tab",
+                 body: "Five tabs; the terminal lives under Sessions / Inbox / Feature Sessions sub-tab. Tab bar hides while the terminal is presented.",
+                 actor: .human, actorName: "Nick", hoursAgo: 6),
+            Spec(featureID: 12,
+                 title: "Default tab is Inbox",
+                 body: "Inbox surfaces the agent's needs-you queue; users open the app to triage, not to browse projects.",
+                 actor: .human, actorName: "Nick", hoursAgo: 30),
+            // Feature 21 — Project hierarchy prototype
+            Spec(featureID: 21,
+                 title: "Don't conflate AgentSession with raw tmux Session",
+                 body: "AgentSession is the persistent record (state, transcript_key, cost). Raw Session/Pane stay for the WebSocket transport.",
+                 actor: .agent, actorName: "Codex", hoursAgo: 8),
+            Spec(featureID: 21,
+                 title: "OpenAPI is the single source of truth",
+                 body: "Mobile + web both consume generated types. Hand-rolled DTOs that duplicate the contract get deleted on sight.",
+                 actor: .human, actorName: "Nick", hoursAgo: 72)
+        ]
+
+        var decisions: [Components.Schemas.Decision] = []
+        var decisionID: Int64 = 700
+        let now = Date()
+
+        for spec in specs {
+            decisions.append(Components.Schemas.Decision(
+                id: decisionID,
+                featureId: spec.featureID,
+                title: spec.title,
+                body: spec.body,
+                actor: spec.actor,
+                actorName: spec.actorName,
+                createdAt: now.addingTimeInterval(-spec.hoursAgo * 3600)
+            ))
+            decisionID += 1
+        }
+
+        return (decisions, decisionID)
     }
 }
