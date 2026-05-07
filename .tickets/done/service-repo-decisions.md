@@ -1,7 +1,7 @@
 ---
 prefix: service
 title: Add Decision repository methods
-status: active
+status: done
 branch: service-0009
 ---
 
