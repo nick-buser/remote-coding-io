@@ -421,6 +421,27 @@ final class LiveTmuxAgentRepository: TmuxAgentRepository {
         }
     }
 
+    // MARK: Activity
+
+    func listActivity(project: String?, feature: Int64?, since: Date?, limit: Int?) async throws -> [Components.Schemas.ActivityEvent] {
+        let output = try await client.listActivity(.init(query: .init(
+            project: project,
+            feature: feature,
+            since: since,
+            limit: limit
+        )))
+        switch output {
+        case .ok(let response):
+            return try response.body.json
+        case .badRequest(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .serviceUnavailable(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .undocumented(let statusCode, _):
+            throw RepositoryError.http(statusCode)
+        }
+    }
+
     // MARK: Local project notes (UserDefaults — no contract endpoint yet)
 
     func listProjectDocuments(projectID: Int64) async throws -> [LocalProjectNote] {

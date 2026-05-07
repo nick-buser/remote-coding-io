@@ -23,6 +23,7 @@ protocol TmuxAgentRepository {
     func listFeatureDecisions(featureID: Int64) async throws -> [Components.Schemas.Decision]
     func createFeatureDecision(featureID: Int64, body: Components.Schemas.CreateDecisionRequest) async throws -> Components.Schemas.Decision
     func deleteDecision(id: Int64) async throws
+    func listActivity(project: String?, feature: Int64?, since: Date?, limit: Int?) async throws -> [Components.Schemas.ActivityEvent]
     func listProjectDocuments(projectID: Int64) async throws -> [LocalProjectNote]
     func saveDocument(_ document: LocalProjectNote) async throws -> LocalProjectNote
     func openProjectSession(idOrSlug: String) async throws -> Components.Schemas.Project

@@ -384,6 +384,119 @@ struct remote_codingTests {
         #expect(after.count == initial.count - 1)
     }
 
+    // MARK: Activity
+
+    @MainActor
+    @Test func listActivityReturnsAllSeededEventsNewestFirstWhenUnfiltered() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let events = try await repository.listActivity(project: nil, feature: nil, since: nil, limit: nil)
+
+        // 10 events from data.jsx are seeded. createdAt DESC must hold.
+        #expect(events.count == 10)
+        let dates = events.map(\.createdAt)
+        #expect(dates == dates.sorted(by: >))
+    }
+
+    @MainActor
+    @Test func listActivityFiltersByProjectFeatureSinceAndLimit() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        // Project filter — slug accepted alongside numeric id.
+        let onProject1 = try await repository.listActivity(project: "tmux-server-coding-app", feature: nil, since: nil, limit: nil)
+        let onProject2 = try await repository.listActivity(project: "2", feature: nil, since: nil, limit: nil)
+        // Feature filter (across all projects).
+        let onFeature11 = try await repository.listActivity(project: nil, feature: 11, since: nil, limit: nil)
+        // Since filter — strict greater-than the cursor.
+        let cursor = onFeature11.last!.createdAt
+        let afterCursor = try await repository.listActivity(project: nil, feature: 11, since: cursor, limit: nil)
+        // Limit clamps the result.
+        let limited = try await repository.listActivity(project: nil, feature: nil, since: nil, limit: 3)
+
+        #expect(onProject1.allSatisfy { $0.projectId == 1 })
+        #expect(onProject2.allSatisfy { $0.projectId == 2 })
+        #expect(onFeature11.allSatisfy { $0.featureId == 11 })
+        // Strict > cursor — the cursor event itself is excluded.
+        #expect(afterCursor.contains(where: { $0.createdAt == cursor }) == false)
+        #expect(afterCursor.count == onFeature11.count - 1)
+        #expect(limited.count == 3)
+    }
+
+    @MainActor
+    @Test func activityPollerAdvancesCursorAcrossTwoTicks() async throws {
+        let repository = MockTmuxAgentRepository()
+        let poller = ActivityPoller(repository: repository, interval: .seconds(60), limit: 100)
+
+        // Tick 1 — pulls every seeded event, cursor pins to the newest.
+        let firstBatch = await poller.tick()
+        #expect(firstBatch.isEmpty == false)
+        let firstCursor = poller.cursor
+        #expect(firstCursor != nil)
+        #expect(poller.events.count == firstBatch.count)
+
+        // Tick 2 with the buffer at the latest cursor — nothing newer
+        // exists, so the poll returns no records and cursor stays put.
+        let secondBatch = await poller.tick()
+        #expect(secondBatch.isEmpty)
+        #expect(poller.cursor == firstCursor)
+
+        // Inject a newer event and verify the next tick picks it up
+        // and advances the cursor.
+        let injected = Components.Schemas.ActivityEvent(
+            id: 999,
+            projectId: 1,
+            featureId: 11,
+            ticketId: nil,
+            actor: .agent,
+            actorName: "session-04",
+            verb: "drafted",
+            kind: .doc,
+            detail: "fresh fixture",
+            createdAt: Date().addingTimeInterval(60)
+        )
+        repository.appendActivityEvent(injected)
+        let thirdBatch = await poller.tick()
+        #expect(thirdBatch.count == 1)
+        #expect(thirdBatch.first?.id == 999)
+        #expect(poller.cursor == injected.createdAt)
+        // Newer event lands at the front of the buffer.
+        #expect(poller.events.first?.id == 999)
+    }
+
+    @MainActor
+    @Test func activityPollerNeedsYouFlipsOnQuestionAndResetsAfterMarkSeen() async throws {
+        let repository = MockTmuxAgentRepository()
+        let poller = ActivityPoller(repository: repository, interval: .seconds(60), limit: 100)
+
+        await poller.tick()
+        // Seed already contains a `kind == question` event; needsYou
+        // flips on the first tick because no markSeen cursor exists.
+        #expect(poller.needsYou == true)
+
+        // markSeen captures the latest event timestamp; needsYou drops
+        // because no event is newer than the seen cursor.
+        poller.markSeen()
+        #expect(poller.needsYou == false)
+
+        // A newly-injected `kind == question` event newer than the seen
+        // cursor flips needsYou back on.
+        let injected = Components.Schemas.ActivityEvent(
+            id: 998,
+            projectId: 2,
+            featureId: 21,
+            ticketId: 208,
+            actor: .agent,
+            actorName: "session-07",
+            verb: "asked",
+            kind: .question,
+            detail: "is this column expected?",
+            createdAt: Date().addingTimeInterval(120)
+        )
+        repository.appendActivityEvent(injected)
+        await poller.tick()
+        #expect(poller.needsYou == true)
+    }
+
     // MARK: Local project notes
 
     @MainActor

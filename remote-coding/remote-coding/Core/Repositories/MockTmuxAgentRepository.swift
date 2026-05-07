@@ -19,6 +19,8 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
     private var nextDocID: Int64
     private var decisions: [Components.Schemas.Decision]
     private var nextDecisionID: Int64
+    private var activityEvents: [Components.Schemas.ActivityEvent]
+    private var nextActivityEventID: Int64
     // Tickets are stored without their inline `criteria` array; the
     // single-ticket GET attaches criteria from `criteriaByTicketID` so
     // listTickets can match the contract (criteria omitted) without a
@@ -72,6 +74,9 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
         let decisionSeed = Self.seedDecisions()
         decisions = decisionSeed.decisions
         nextDecisionID = decisionSeed.nextDecisionID
+        let activitySeed = Self.seedActivityEvents()
+        activityEvents = activitySeed.events
+        nextActivityEventID = activitySeed.nextID
 
         let seed = Self.seedTickets()
         tickets = seed.tickets
@@ -372,6 +377,46 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
             throw MockRepositoryError.notFound
         }
         decisions.remove(at: index)
+    }
+
+    // MARK: Activity
+
+    func listActivity(project: String?, feature: Int64?, since: Date?, limit: Int?) async throws -> [Components.Schemas.ActivityEvent] {
+        var resolvedProjectID: Int64?
+        if let project {
+            // Mirrors the contract: the query param accepts numeric id or
+            // slug. Resolve to a numeric id locally so the per-event
+            // project_id comparison stays simple.
+            if let id = Int64(project) {
+                resolvedProjectID = id
+            } else if let resolved = projects.first(where: { $0.slug == project })?.id {
+                resolvedProjectID = resolved
+            } else {
+                resolvedProjectID = nil
+            }
+        }
+        var filtered = activityEvents
+        if let resolvedProjectID {
+            filtered = filtered.filter { $0.projectId == resolvedProjectID }
+        }
+        if let feature {
+            filtered = filtered.filter { $0.featureId == feature }
+        }
+        if let since {
+            // Spec: only events strictly newer than `since`. The poller
+            // advances on the latest createdAt it has already seen, so
+            // strict-greater-than prevents duplicates on the next tick.
+            filtered = filtered.filter { $0.createdAt > since }
+        }
+        let sorted = filtered.sorted { $0.createdAt > $1.createdAt }
+        let cap = max(min(limit ?? 100, 500), 1)
+        return Array(sorted.prefix(cap))
+    }
+
+    // Test helper. Lets ActivityPollerTests inject a controllable
+    // fixture without rebuilding the whole repository surface.
+    func appendActivityEvent(_ event: Components.Schemas.ActivityEvent) {
+        activityEvents.append(event)
     }
 
     // MARK: Local project notes
@@ -1024,5 +1069,78 @@ private extension MockTmuxAgentRepository {
         }
 
         return (decisions, decisionID)
+    }
+
+    // Seeds the 10 fixture activity events from the design's data.jsx.
+    // Mapping FEAT-018 → feature 11 (project 1), FEAT-019 → feature 12
+    // (project 1), FEAT-020 → feature 21 (project 2). Ticket numeric ids
+    // mirror seedTickets — TMX-0042 = 200, TMX-0043 = 201, TMX-0044 =
+    // 202, TMX-0050 = 208, TMX-0051 = 209.
+    static func seedActivityEvents() -> (events: [Components.Schemas.ActivityEvent], nextID: Int64) {
+        struct Spec {
+            let actor: Components.Schemas.ActivityActor
+            let actorName: String
+            let verb: String
+            let kind: Components.Schemas.ActivityKind
+            let detail: String
+            let projectID: Int64?
+            let featureID: Int64?
+            let ticketID: Int64?
+            let minutesAgo: Double
+        }
+        let specs: [Spec] = [
+            Spec(actor: .agent, actorName: "session-04", verb: "pushed 3 commits",
+                 kind: .commit, detail: "pane registry skeleton + tests",
+                 projectID: 1, featureID: 11, ticketID: 200, minutesAgo: 12),
+            Spec(actor: .agent, actorName: "session-04", verb: "updated checklist",
+                 kind: .check, detail: "2/4 acceptance criteria met",
+                 projectID: 1, featureID: 11, ticketID: 200, minutesAgo: 14),
+            Spec(actor: .agent, actorName: "session-07", verb: "opened review",
+                 kind: .review, detail: "+412 / −37 across 9 files",
+                 projectID: 2, featureID: 21, ticketID: 208, minutesAgo: 32),
+            Spec(actor: .human, actorName: "you", verb: "edited PRD",
+                 kind: .doc, detail: "“Resume hook re-injects last 200 lines”",
+                 projectID: 1, featureID: 12, ticketID: nil, minutesAgo: 60),
+            Spec(actor: .agent, actorName: "session-05", verb: "logged decision",
+                 kind: .decision, detail: "use slug+sha as bundle key, not branch",
+                 projectID: 1, featureID: 12, ticketID: nil, minutesAgo: 65),
+            Spec(actor: .agent, actorName: "session-07", verb: "requested input",
+                 kind: .question, detail: "“Use unified diff or split? defaulting to split.”",
+                 projectID: 2, featureID: 21, ticketID: 208, minutesAgo: 120),
+            Spec(actor: .agent, actorName: "session-04", verb: "ran tests",
+                 kind: .test, detail: "go test ./... — 142 passed, 0 failed",
+                 projectID: 1, featureID: 11, ticketID: 201, minutesAgo: 180),
+            Spec(actor: .human, actorName: "you", verb: "approved",
+                 kind: .approve, detail: "merged into FEAT-018",
+                 projectID: 1, featureID: 11, ticketID: 202, minutesAgo: 240),
+            Spec(actor: .agent, actorName: "session-05", verb: "drafted spec",
+                 kind: .doc, detail: "Eng design v2 — 8 sections, 1.4k words",
+                 projectID: 1, featureID: 12, ticketID: nil, minutesAgo: 300),
+            Spec(actor: .agent, actorName: "session-07", verb: "rebased",
+                 kind: .commit, detail: "on FEAT-020 head, no conflicts",
+                 projectID: 2, featureID: 21, ticketID: 209, minutesAgo: 360)
+        ]
+
+        var events: [Components.Schemas.ActivityEvent] = []
+        var eventID: Int64 = 900
+        let now = Date()
+
+        for spec in specs {
+            events.append(Components.Schemas.ActivityEvent(
+                id: eventID,
+                projectId: spec.projectID,
+                featureId: spec.featureID,
+                ticketId: spec.ticketID,
+                actor: spec.actor,
+                actorName: spec.actorName,
+                verb: spec.verb,
+                kind: spec.kind,
+                detail: spec.detail,
+                createdAt: now.addingTimeInterval(-spec.minutesAgo * 60)
+            ))
+            eventID += 1
+        }
+
+        return (events, eventID)
     }
 }
