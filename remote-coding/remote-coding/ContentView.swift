@@ -54,12 +54,8 @@ struct ContentView: View {
 
             Tab(value: AppTab.sessions) {
                 NavigationStack(path: coordinator.binding(for: .sessions)) {
-                    TabPlaceholder(
-                        systemImage: "terminal",
-                        title: "Sessions",
-                        message: "Agent sessions, grouped by state. Coming in service-sessions-list."
-                    )
-                    .navigationDestination(for: AppRoute.self, destination: destinationView)
+                    SessionsListView()
+                        .navigationDestination(for: AppRoute.self, destination: destinationView)
                 }
             } label: {
                 Label("Sessions", systemImage: "terminal")

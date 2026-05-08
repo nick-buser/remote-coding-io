@@ -1,8 +1,8 @@
 ---
 prefix: service
 title: Build Sessions tab — awaiting-you hero plus status-grouped list
-status: todo
-branch:
+status: done
+branch: service-0018
 ---
 
 ## Description
