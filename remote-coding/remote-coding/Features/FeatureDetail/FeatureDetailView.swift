@@ -17,6 +17,7 @@ struct FeatureDetailView: View {
     @State private var viewModel: FeatureDetailViewModel
     @State private var section: String = FeatureDetailSection.tickets.rawValue
     @State private var showCreateTicketSheet = false
+    @State private var showSpawnSessionSheet = false
 
     init(project: Components.Schemas.Project, feature: Components.Schemas.Feature) {
         _viewModel = State(initialValue: FeatureDetailViewModel(project: project, feature: feature))
@@ -49,6 +50,16 @@ struct FeatureDetailView: View {
         .sheet(isPresented: $showCreateTicketSheet) {
             CreateTicketSheet(featureID: viewModel.feature.id, accent: viewModel.accentColor) { created in
                 viewModel.tickets.insert(created, at: 0)
+            }
+        }
+        .sheet(isPresented: $showSpawnSessionSheet) {
+            SpawnSessionSheet(
+                feature: viewModel.feature,
+                tickets: viewModel.tickets,
+                accent: viewModel.accentColor
+            ) { created in
+                viewModel.agentSessions.insert(created, at: 0)
+                coordinator.push(.agentSession(sessionID: created.id))
             }
         }
     }
@@ -147,7 +158,7 @@ struct FeatureDetailView: View {
             case .tickets:   ticketsBody
             case .prd:       prdBody
             case .decisions: decisionsBody
-            case .sessions:  sessionsSummary
+            case .sessions:  sessionsBody
             }
         }
     }
@@ -177,13 +188,15 @@ struct FeatureDetailView: View {
         FeatureDecisionsTab(viewModel: viewModel, accent: viewModel.accentColor)
     }
 
-    private var sessionsSummary: some View {
-        EmptyState(
-            systemImage: "terminal",
-            title: "Sessions — \(viewModel.agentSessions.count)",
-            message: "Session list + Spawn flow lands in service-feature-sessions-tab."
+    private var sessionsBody: some View {
+        FeatureSessionsTab(
+            viewModel: viewModel,
+            accent: viewModel.accentColor,
+            showSpawnSheet: $showSpawnSessionSheet,
+            onSelect: { session in
+                coordinator.push(.agentSession(sessionID: session.id))
+            }
         )
-        .padding(.horizontal, Theme.Spacing.s4)
     }
 
     // MARK: - Footer
@@ -194,8 +207,9 @@ struct FeatureDetailView: View {
                 showCreateTicketSheet = true
             }
             PillButton(title: "Spawn session", role: .secondary, accent: viewModel.accentColor, wide: true) {
-                // Sheet lands in service-feature-sessions-tab.
+                showSpawnSessionSheet = true
             }
+            .disabled(viewModel.tickets.isEmpty)
         }
         .padding(.horizontal, Theme.Spacing.s4)
         .padding(.top, Theme.Spacing.s2)
