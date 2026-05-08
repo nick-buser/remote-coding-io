@@ -1,7 +1,7 @@
 ---
 prefix: service
 title: Add Ticket review actions — diff, approve, request-changes, send-back
-status: active
+status: done
 branch: service-0012
 ---
 
