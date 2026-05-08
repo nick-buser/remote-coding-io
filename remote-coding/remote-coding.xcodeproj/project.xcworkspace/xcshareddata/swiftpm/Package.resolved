@@ -2,6 +2,15 @@
   "originHash" : "9568415eb5efc6677a742dd2cc46d3313db6cd8e7d61ccf57a91e59a2fb11550",
   "pins" : [
     {
+      "identity" : "runestone",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/simonbs/Runestone",
+      "state" : {
+        "revision" : "0000000000000000000000000000000000000000",
+        "version" : "0.3.0"
+      }
+    },
+    {
       "identity" : "openapikit",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/mattpolzin/OpenAPIKit",
