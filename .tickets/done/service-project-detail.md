@@ -1,8 +1,8 @@
 ---
 prefix: service
 title: Rebuild Project detail with hero, stats strip, segmented sections
-status: todo
-branch:
+status: done
+branch: service-0015
 ---
 
 ## Description
