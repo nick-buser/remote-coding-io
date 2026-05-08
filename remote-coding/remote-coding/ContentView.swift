@@ -45,12 +45,8 @@ struct ContentView: View {
 
             Tab(value: AppTab.roadmap) {
                 NavigationStack(path: coordinator.binding(for: .roadmap)) {
-                    TabPlaceholder(
-                        systemImage: "chart.bar.xaxis",
-                        title: "Roadmap",
-                        message: "Milestone timeline. Coming in service-roadmap-screen."
-                    )
-                    .navigationDestination(for: AppRoute.self, destination: destinationView)
+                    RoadmapView()
+                        .navigationDestination(for: AppRoute.self, destination: destinationView)
                 }
             } label: {
                 Label("Roadmap", systemImage: "chart.bar.xaxis")
