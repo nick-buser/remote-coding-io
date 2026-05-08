@@ -16,6 +16,8 @@ struct FeatureDetailView: View {
 
     @State private var viewModel: FeatureDetailViewModel
     @State private var section: String = FeatureDetailSection.tickets.rawValue
+    @State private var showCreateTicketSheet = false
+    @State private var showSpawnSessionSheet = false
 
     init(project: Components.Schemas.Project, feature: Components.Schemas.Feature) {
         _viewModel = State(initialValue: FeatureDetailViewModel(project: project, feature: feature))
@@ -44,6 +46,21 @@ struct FeatureDetailView: View {
         }
         .refreshable {
             await viewModel.load(repository: appModel.repository)
+        }
+        .sheet(isPresented: $showCreateTicketSheet) {
+            CreateTicketSheet(featureID: viewModel.feature.id, accent: viewModel.accentColor) { created in
+                viewModel.tickets.insert(created, at: 0)
+            }
+        }
+        .sheet(isPresented: $showSpawnSessionSheet) {
+            SpawnSessionSheet(
+                feature: viewModel.feature,
+                tickets: viewModel.tickets,
+                accent: viewModel.accentColor
+            ) { created in
+                viewModel.agentSessions.insert(created, at: 0)
+                coordinator.push(.agentSession(sessionID: created.id))
+            }
         }
     }
 
@@ -138,51 +155,48 @@ struct FeatureDetailView: View {
             .padding(.top, Theme.Spacing.s4)
         } else {
             switch FeatureDetailSection.from(label: section) {
-            case .tickets:   ticketsSummary
-            case .prd:       prdSummary
-            case .decisions: decisionsSummary
-            case .sessions:  sessionsSummary
+            case .tickets:   ticketsBody
+            case .prd:       prdBody
+            case .decisions: decisionsBody
+            case .sessions:  sessionsBody
             }
         }
     }
 
-    /// Each sub-tab summary renders an `EmptyState` carrying the
-    /// future-ticket name plus a count snapshot from the loaded data —
-    /// enough to confirm the wire-up without claiming the body's done.
-    private var ticketsSummary: some View {
-        EmptyState(
-            systemImage: "list.bullet.rectangle",
-            title: "Tickets — \(viewModel.tickets.count) loaded",
-            message: "List body lands in service-feature-tickets-tab."
+    private var ticketsBody: some View {
+        FeatureTicketsTab(
+            viewModel: viewModel,
+            showCreateSheet: $showCreateTicketSheet,
+            repository: appModel.repository,
+            onSelect: { ticket in
+                coordinator.push(.ticketDetail(publicID: ticket.publicId))
+            }
         )
-        .padding(.horizontal, Theme.Spacing.s4)
     }
 
-    private var prdSummary: some View {
-        EmptyState(
-            systemImage: "doc.text",
-            title: "PRD — \(viewModel.docs.count) doc\(viewModel.docs.count == 1 ? "" : "s")",
-            message: "TipTap renderer lands in service-feature-prd-tab."
+    private var prdBody: some View {
+        FeaturePRDTab(
+            viewModel: viewModel,
+            accent: viewModel.accentColor,
+            onSelect: { doc in
+                coordinator.push(.docDetail(docID: doc.id))
+            }
         )
-        .padding(.horizontal, Theme.Spacing.s4)
     }
 
-    private var decisionsSummary: some View {
-        EmptyState(
-            systemImage: "scribble.variable",
-            title: "Decisions — \(viewModel.decisions.count)",
-            message: "Append-only log lands in service-feature-decisions-tab."
-        )
-        .padding(.horizontal, Theme.Spacing.s4)
+    private var decisionsBody: some View {
+        FeatureDecisionsTab(viewModel: viewModel, accent: viewModel.accentColor)
     }
 
-    private var sessionsSummary: some View {
-        EmptyState(
-            systemImage: "terminal",
-            title: "Sessions — \(viewModel.agentSessions.count)",
-            message: "Session list + Spawn flow lands in service-feature-sessions-tab."
+    private var sessionsBody: some View {
+        FeatureSessionsTab(
+            viewModel: viewModel,
+            accent: viewModel.accentColor,
+            showSpawnSheet: $showSpawnSessionSheet,
+            onSelect: { session in
+                coordinator.push(.agentSession(sessionID: session.id))
+            }
         )
-        .padding(.horizontal, Theme.Spacing.s4)
     }
 
     // MARK: - Footer
@@ -190,11 +204,12 @@ struct FeatureDetailView: View {
     private var footerActions: some View {
         HStack(spacing: 8) {
             PillButton(title: "+ New ticket", role: .primary, accent: viewModel.accentColor, wide: true) {
-                // Sheet lands in service-feature-tickets-tab.
+                showCreateTicketSheet = true
             }
             PillButton(title: "Spawn session", role: .secondary, accent: viewModel.accentColor, wide: true) {
-                // Sheet lands in service-feature-sessions-tab.
+                showSpawnSessionSheet = true
             }
+            .disabled(viewModel.tickets.isEmpty)
         }
         .padding(.horizontal, Theme.Spacing.s4)
         .padding(.top, Theme.Spacing.s2)
