@@ -146,7 +146,7 @@ struct FeatureDetailView: View {
             switch FeatureDetailSection.from(label: section) {
             case .tickets:   ticketsBody
             case .prd:       prdBody
-            case .decisions: decisionsSummary
+            case .decisions: decisionsBody
             case .sessions:  sessionsSummary
             }
         }
@@ -173,13 +173,8 @@ struct FeatureDetailView: View {
         )
     }
 
-    private var decisionsSummary: some View {
-        EmptyState(
-            systemImage: "scribble.variable",
-            title: "Decisions — \(viewModel.decisions.count)",
-            message: "Append-only log lands in service-feature-decisions-tab."
-        )
-        .padding(.horizontal, Theme.Spacing.s4)
+    private var decisionsBody: some View {
+        FeatureDecisionsTab(viewModel: viewModel, accent: viewModel.accentColor)
     }
 
     private var sessionsSummary: some View {
