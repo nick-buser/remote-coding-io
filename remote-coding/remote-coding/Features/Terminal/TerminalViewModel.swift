@@ -15,6 +15,7 @@ final class TerminalViewModel {
     var renderedBuffer = AttributedString()
     var input = ""
     var isLoading = false
+    var isSending = false
     var errorMessage: String?
     var showSpawnSheet = false
 
@@ -103,6 +104,7 @@ final class TerminalViewModel {
 
     func sendInput(_ request: Components.Schemas.SendInputRequest, repository: TmuxAgentRepository) async {
         guard let s = session else { return }
+        isSending = true
         errorMessage = nil
         do {
             _ = try await repository.sendPaneInput(
@@ -118,6 +120,7 @@ final class TerminalViewModel {
         } catch {
             errorMessage = "Unable to send input."
         }
+        isSending = false
     }
 
     // MARK: - Private

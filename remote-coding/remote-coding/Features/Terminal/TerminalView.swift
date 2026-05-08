@@ -38,7 +38,27 @@ struct TerminalView: View {
                             )
                         }
                     }
-                    inputBarPlaceholder
+                    TerminalInputBar(
+                        text: Binding(
+                            get: { viewModel.input },
+                            set: { viewModel.input = $0 }
+                        ),
+                        accent: appModel.accent,
+                        isSending: viewModel.isSending,
+                        lastPromptHint: TerminalInputBar.extractPromptHint(from: viewModel.output),
+                        onSend: { mode in
+                            let text = viewModel.input
+                            viewModel.input = ""
+                            Task {
+                                let request: Components.Schemas.SendInputRequest = switch mode {
+                                case .sendAndEnter: .text(text, submit: true)
+                                case .sendOnly:     .text(text, submit: false)
+                                case .enterOnly:    .enterOnly()
+                                }
+                                await viewModel.sendInput(request, repository: appModel.repository)
+                            }
+                        }
+                    )
                 }
             }
         }
@@ -142,25 +162,6 @@ struct TerminalView: View {
                 proxy.scrollTo("terminalBottom", anchor: .bottom)
             }
         }
-    }
-
-    // MARK: - Placeholder (filled by service-terminal-input)
-
-    private var inputBarPlaceholder: some View {
-        HStack {
-            Text("send a command…")
-                .font(.system(size: 14, design: .monospaced))
-                .foregroundStyle(Theme.Text.fg3(.dark))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Theme.Surface.terminalInput, in: Capsule())
-            Spacer(minLength: 8)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(Theme.Surface.terminalChrome)
-        .overlay(alignment: .top) { hairline }
     }
 
     // MARK: - Error
