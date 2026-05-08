@@ -14,14 +14,19 @@ enum AppTab: String, Hashable, Codable, CaseIterable {
 }
 
 @Observable
+@MainActor
 final class AppModel {
     @ObservationIgnored var repository: TmuxAgentRepository
 
-    /// Drives the small accent dot on the Inbox tab.
-    /// Real wiring lands with `service-repo-activity`; for now it
-    /// defaults to `true` so the indicator is visible during the
-    /// placeholder shell phase.
-    var needsYou: Bool = true
+    /// Workspace-scoped activity feed. The Inbox dot derives from
+    /// `activityPoller.needsYou`; per-screen pollers can be spawned
+    /// alongside this one without conflict.
+    var activityPoller: ActivityPoller
+
+    /// Drives the small accent dot on the Inbox tab. Mirrors
+    /// `activityPoller.needsYou` so views can keep reading
+    /// `appModel.needsYou`.
+    var needsYou: Bool { activityPoller.needsYou }
     var apiConfiguration: APIConfiguration
     var isUsingMockRepository: Bool
     /// User-selected accent. Persistence + UI for changing this lands
@@ -32,13 +37,16 @@ final class AppModel {
 
     init(apiConfiguration: APIConfiguration = APIConfigurationStore.load()) {
         self.apiConfiguration = apiConfiguration
-        repository = LiveTmuxAgentRepository(configuration: apiConfiguration)
+        let repository = LiveTmuxAgentRepository(configuration: apiConfiguration)
+        self.repository = repository
+        self.activityPoller = ActivityPoller(repository: repository)
         isUsingMockRepository = false
     }
 
     init(repository: TmuxAgentRepository, apiConfiguration: APIConfiguration = APIConfigurationStore.load()) {
         self.apiConfiguration = apiConfiguration
         self.repository = repository
+        self.activityPoller = ActivityPoller(repository: repository)
         isUsingMockRepository = true
     }
 
@@ -46,7 +54,10 @@ final class AppModel {
         let configuration = try APIConfiguration(baseURLString: rawValue)
         APIConfigurationStore.save(configuration)
         apiConfiguration = configuration
-        repository = LiveTmuxAgentRepository(configuration: configuration)
+        let repository = LiveTmuxAgentRepository(configuration: configuration)
+        self.repository = repository
+        activityPoller.stop()
+        activityPoller = ActivityPoller(repository: repository)
         isUsingMockRepository = false
     }
 
@@ -54,7 +65,10 @@ final class AppModel {
         let configuration = APIConfiguration.default
         APIConfigurationStore.save(configuration)
         apiConfiguration = configuration
-        repository = LiveTmuxAgentRepository(configuration: configuration)
+        let repository = LiveTmuxAgentRepository(configuration: configuration)
+        self.repository = repository
+        activityPoller.stop()
+        activityPoller = ActivityPoller(repository: repository)
         isUsingMockRepository = false
     }
 }

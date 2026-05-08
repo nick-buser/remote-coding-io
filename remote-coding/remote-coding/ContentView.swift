@@ -86,6 +86,13 @@ struct ContentView: View {
         .tint(appModel.accent.value(for: scheme))
         .toolbarBackground(Theme.Surface.tabBg(scheme), for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
+        .task {
+            // Workspace-scoped poller drives the Inbox dot. Per-screen
+            // pollers can spawn alongside this one without conflict.
+            // ScenePhase pause / resume lands when the terminal screen
+            // takes over the surface in service-terminal-shell.
+            appModel.activityPoller.start(scope: .workspace)
+        }
     }
 
     private var selectedTabBinding: Binding<AppTab> {

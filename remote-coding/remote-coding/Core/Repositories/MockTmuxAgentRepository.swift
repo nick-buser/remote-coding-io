@@ -19,6 +19,11 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
     private var nextDocID: Int64
     private var decisions: [Components.Schemas.Decision]
     private var nextDecisionID: Int64
+    private var activityEvents: [Components.Schemas.ActivityEvent]
+    private var nextActivityEventID: Int64
+    private var agentSessions: [Components.Schemas.AgentSession]
+    private var nextAgentSessionID: Int64
+    private var ticketDiffsByPublicID: [String: Components.Schemas.TicketDiff]
     // Tickets are stored without their inline `criteria` array; the
     // single-ticket GET attaches criteria from `criteriaByTicketID` so
     // listTickets can match the contract (criteria omitted) without a
@@ -72,6 +77,13 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
         let decisionSeed = Self.seedDecisions()
         decisions = decisionSeed.decisions
         nextDecisionID = decisionSeed.nextDecisionID
+        let activitySeed = Self.seedActivityEvents()
+        activityEvents = activitySeed.events
+        nextActivityEventID = activitySeed.nextID
+        let agentSessionSeed = Self.seedAgentSessions()
+        agentSessions = agentSessionSeed.sessions
+        nextAgentSessionID = agentSessionSeed.nextID
+        ticketDiffsByPublicID = Self.seedTicketDiffs()
 
         let seed = Self.seedTickets()
         tickets = seed.tickets
@@ -372,6 +384,222 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
             throw MockRepositoryError.notFound
         }
         decisions.remove(at: index)
+    }
+
+    // MARK: Activity
+
+    func listActivity(project: String?, feature: Int64?, since: Date?, limit: Int?) async throws -> [Components.Schemas.ActivityEvent] {
+        var resolvedProjectID: Int64?
+        if let project {
+            // Mirrors the contract: the query param accepts numeric id or
+            // slug. Resolve to a numeric id locally so the per-event
+            // project_id comparison stays simple.
+            if let id = Int64(project) {
+                resolvedProjectID = id
+            } else if let resolved = projects.first(where: { $0.slug == project })?.id {
+                resolvedProjectID = resolved
+            } else {
+                resolvedProjectID = nil
+            }
+        }
+        var filtered = activityEvents
+        if let resolvedProjectID {
+            filtered = filtered.filter { $0.projectId == resolvedProjectID }
+        }
+        if let feature {
+            filtered = filtered.filter { $0.featureId == feature }
+        }
+        if let since {
+            // Spec: only events strictly newer than `since`. The poller
+            // advances on the latest createdAt it has already seen, so
+            // strict-greater-than prevents duplicates on the next tick.
+            filtered = filtered.filter { $0.createdAt > since }
+        }
+        let sorted = filtered.sorted { $0.createdAt > $1.createdAt }
+        let cap = max(min(limit ?? 100, 500), 1)
+        return Array(sorted.prefix(cap))
+    }
+
+    // Test helper. Lets ActivityPollerTests inject a controllable
+    // fixture without rebuilding the whole repository surface.
+    func appendActivityEvent(_ event: Components.Schemas.ActivityEvent) {
+        activityEvents.append(event)
+    }
+
+    // MARK: Agent sessions
+
+    func listProjectAgentSessions(projectIDOrSlug: String) async throws -> [Components.Schemas.AgentSession] {
+        let project = try await getProject(idOrSlug: projectIDOrSlug)
+        let projectFeatureIDs = Set(features.filter { $0.projectId == project.id }.map(\.id))
+        return agentSessions
+            .filter { session in
+                guard let ticketID = session.ticketId,
+                      let ticket = tickets.first(where: { $0.id == ticketID }) else {
+                    return false
+                }
+                return projectFeatureIDs.contains(ticket.featureId)
+            }
+            .sorted { $0.lastActiveAt > $1.lastActiveAt }
+    }
+
+    func listTicketAgentSessions(ticketPublicID: String) async throws -> [Components.Schemas.AgentSession] {
+        guard let ticket = tickets.first(where: { $0.publicId == ticketPublicID }) else {
+            throw MockRepositoryError.notFound
+        }
+        return agentSessions
+            .filter { $0.ticketId == ticket.id }
+            .sorted { $0.lastActiveAt > $1.lastActiveAt }
+    }
+
+    func createAgentSession(_ body: Components.Schemas.CreateAgentSessionRequest) async throws -> Components.Schemas.AgentSession {
+        guard let ticket = tickets.first(where: { $0.publicId == body.ticketPublicId }) else {
+            throw MockRepositoryError.notFound
+        }
+        guard let feature = features.first(where: { $0.id == ticket.featureId }) else {
+            throw MockRepositoryError.notFound
+        }
+        guard let project = projects.first(where: { $0.id == feature.projectId }) else {
+            throw MockRepositoryError.notFound
+        }
+        let now = Date()
+        let derivedTmux = body.tmuxSession ?? Self.derivedTmuxSessionName(
+            project: project, feature: feature, ticket: ticket
+        )
+        let session = Components.Schemas.AgentSession(
+            id: nextAgentSessionID,
+            ticketId: ticket.id,
+            tmuxSession: derivedTmux,
+            state: body.state ?? .idle,
+            pane: body.pane,
+            cpu: body.cpu ?? 0,
+            startTime: now,
+            endTime: nil,
+            lastActiveAt: now,
+            transcriptKey: nil,
+            tokenUsage: nil,
+            costEstimate: nil,
+            createdAt: now
+        )
+        nextAgentSessionID += 1
+        agentSessions.append(session)
+        // Activity feed mirror — service-repo-activity is in place, so
+        // the poller / Inbox sees the spawn without an extra fetch.
+        activityEvents.append(Components.Schemas.ActivityEvent(
+            id: nextActivityEventID,
+            projectId: project.id,
+            featureId: feature.id,
+            ticketId: ticket.id,
+            actor: .agent,
+            actorName: derivedTmux,
+            verb: "spawned session",
+            kind: .check,
+            detail: "tmux: \(derivedTmux)",
+            createdAt: now
+        ))
+        nextActivityEventID += 1
+        return session
+    }
+
+    private static func derivedTmuxSessionName(
+        project: Components.Schemas.Project,
+        feature: Components.Schemas.Feature,
+        ticket: Components.Schemas.Ticket
+    ) -> String {
+        let projectSlug = sluggify(project.slug)
+        let featureSlug = sluggify(feature.slug)
+        let branch = ticket.branchName.isEmpty ? ticket.publicId : ticket.branchName
+        let branchSlug = sluggify(branch)
+        return "\(projectSlug)__\(featureSlug)__\(branchSlug)"
+    }
+
+    private static func sluggify(_ source: String) -> String {
+        source
+            .lowercased()
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "-", with: "_")
+            .replacingOccurrences(of: " ", with: "_")
+    }
+
+    // MARK: Ticket review
+
+    func getTicketDiff(publicID: String) async throws -> Components.Schemas.TicketDiff {
+        guard let diff = ticketDiffsByPublicID[publicID] else {
+            throw MockRepositoryError.notFound
+        }
+        return diff
+    }
+
+    func approveTicket(publicID: String) async throws -> Components.Schemas.Ticket {
+        guard let index = tickets.firstIndex(where: { $0.publicId == publicID }) else {
+            throw MockRepositoryError.notFound
+        }
+        tickets[index].status = .done
+        tickets[index].updatedAt = Date()
+        emitReviewActivity(ticket: tickets[index], kind: .approve, detail: "Approved")
+        var updated = tickets[index]
+        updated.criteria = sortedCriteria(forTicketID: updated.id)
+        return updated
+    }
+
+    func requestTicketChanges(publicID: String, comment: String?) async throws -> Components.Schemas.Ticket {
+        guard let index = tickets.firstIndex(where: { $0.publicId == publicID }) else {
+            throw MockRepositoryError.notFound
+        }
+        // Spec: stays in `review` — the reviewer wants the agent to push
+        // more commits onto the same branch, not redo the whole ticket.
+        tickets[index].status = .review
+        tickets[index].updatedAt = Date()
+        emitReviewActivity(ticket: tickets[index], kind: .review,
+                           detail: comment ?? "Requested changes")
+        var updated = tickets[index]
+        updated.criteria = sortedCriteria(forTicketID: updated.id)
+        return updated
+    }
+
+    func sendTicketBack(publicID: String, comment: String?) async throws -> Components.Schemas.Ticket {
+        guard let index = tickets.firstIndex(where: { $0.publicId == publicID }) else {
+            throw MockRepositoryError.notFound
+        }
+        // Spec: drops back to `doing` — the review failed and more work
+        // is needed on the original branch.
+        tickets[index].status = .doing
+        tickets[index].updatedAt = Date()
+        emitReviewActivity(ticket: tickets[index], kind: .check,
+                           detail: comment ?? "Sent back")
+        var updated = tickets[index]
+        updated.criteria = sortedCriteria(forTicketID: updated.id)
+        return updated
+    }
+
+    private func emitReviewActivity(
+        ticket: Components.Schemas.Ticket,
+        kind: Components.Schemas.ActivityKind,
+        detail: String
+    ) {
+        let feature = features.first(where: { $0.id == ticket.featureId })
+        let projectID = feature.flatMap { feat in
+            projects.first(where: { $0.id == feat.projectId })?.id
+        }
+        let verb: String
+        switch kind {
+        case .approve: verb = "approved"
+        case .review: verb = "requested changes"
+        case .check: verb = "sent back"
+        default: verb = "reviewed"
+        }
+        activityEvents.append(Components.Schemas.ActivityEvent(
+            id: nextActivityEventID,
+            projectId: projectID,
+            featureId: ticket.featureId,
+            ticketId: ticket.id,
+            actor: .human,
+            actorName: "you",
+            verb: verb,
+            kind: kind,
+            detail: detail,
+            createdAt: Date()
+        ))
+        nextActivityEventID += 1
     }
 
     // MARK: Local project notes
@@ -1024,5 +1252,212 @@ private extension MockTmuxAgentRepository {
         }
 
         return (decisions, decisionID)
+    }
+
+    // Seeds the 10 fixture activity events from the design's data.jsx.
+    // Mapping FEAT-018 → feature 11 (project 1), FEAT-019 → feature 12
+    // (project 1), FEAT-020 → feature 21 (project 2). Ticket numeric ids
+    // mirror seedTickets — TMX-0042 = 200, TMX-0043 = 201, TMX-0044 =
+    // 202, TMX-0050 = 208, TMX-0051 = 209.
+    static func seedActivityEvents() -> (events: [Components.Schemas.ActivityEvent], nextID: Int64) {
+        struct Spec {
+            let actor: Components.Schemas.ActivityActor
+            let actorName: String
+            let verb: String
+            let kind: Components.Schemas.ActivityKind
+            let detail: String
+            let projectID: Int64?
+            let featureID: Int64?
+            let ticketID: Int64?
+            let minutesAgo: Double
+        }
+        let specs: [Spec] = [
+            Spec(actor: .agent, actorName: "session-04", verb: "pushed 3 commits",
+                 kind: .commit, detail: "pane registry skeleton + tests",
+                 projectID: 1, featureID: 11, ticketID: 200, minutesAgo: 12),
+            Spec(actor: .agent, actorName: "session-04", verb: "updated checklist",
+                 kind: .check, detail: "2/4 acceptance criteria met",
+                 projectID: 1, featureID: 11, ticketID: 200, minutesAgo: 14),
+            Spec(actor: .agent, actorName: "session-07", verb: "opened review",
+                 kind: .review, detail: "+412 / −37 across 9 files",
+                 projectID: 2, featureID: 21, ticketID: 208, minutesAgo: 32),
+            Spec(actor: .human, actorName: "you", verb: "edited PRD",
+                 kind: .doc, detail: "“Resume hook re-injects last 200 lines”",
+                 projectID: 1, featureID: 12, ticketID: nil, minutesAgo: 60),
+            Spec(actor: .agent, actorName: "session-05", verb: "logged decision",
+                 kind: .decision, detail: "use slug+sha as bundle key, not branch",
+                 projectID: 1, featureID: 12, ticketID: nil, minutesAgo: 65),
+            Spec(actor: .agent, actorName: "session-07", verb: "requested input",
+                 kind: .question, detail: "“Use unified diff or split? defaulting to split.”",
+                 projectID: 2, featureID: 21, ticketID: 208, minutesAgo: 120),
+            Spec(actor: .agent, actorName: "session-04", verb: "ran tests",
+                 kind: .test, detail: "go test ./... — 142 passed, 0 failed",
+                 projectID: 1, featureID: 11, ticketID: 201, minutesAgo: 180),
+            Spec(actor: .human, actorName: "you", verb: "approved",
+                 kind: .approve, detail: "merged into FEAT-018",
+                 projectID: 1, featureID: 11, ticketID: 202, minutesAgo: 240),
+            Spec(actor: .agent, actorName: "session-05", verb: "drafted spec",
+                 kind: .doc, detail: "Eng design v2 — 8 sections, 1.4k words",
+                 projectID: 1, featureID: 12, ticketID: nil, minutesAgo: 300),
+            Spec(actor: .agent, actorName: "session-07", verb: "rebased",
+                 kind: .commit, detail: "on FEAT-020 head, no conflicts",
+                 projectID: 2, featureID: 21, ticketID: 209, minutesAgo: 360)
+        ]
+
+        var events: [Components.Schemas.ActivityEvent] = []
+        var eventID: Int64 = 900
+        let now = Date()
+
+        for spec in specs {
+            events.append(Components.Schemas.ActivityEvent(
+                id: eventID,
+                projectId: spec.projectID,
+                featureId: spec.featureID,
+                ticketId: spec.ticketID,
+                actor: spec.actor,
+                actorName: spec.actorName,
+                verb: spec.verb,
+                kind: spec.kind,
+                detail: spec.detail,
+                createdAt: now.addingTimeInterval(-spec.minutesAgo * 60)
+            ))
+            eventID += 1
+        }
+
+        return (events, eventID)
+    }
+
+    // Seeds the four agent sessions from the design's data.jsx
+    // (session-04, -05, -07, -08) onto seeded ticket ids. State,
+    // pane, and CPU come straight from the fixture; uptime is
+    // derived from the elapsed time since startTime so views can
+    // exercise AgentSessionExtensions.uptime against realistic
+    // values.
+    static func seedAgentSessions() -> (sessions: [Components.Schemas.AgentSession], nextID: Int64) {
+        struct Spec {
+            let ticketID: Int64?
+            let tmuxSession: String
+            let state: Components.Schemas.SessionState
+            let pane: String
+            let cpu: Double
+            let startMinutesAgo: Double
+            let lastActiveMinutesAgo: Double
+        }
+        let specs: [Spec] = [
+            // session-04 → TMX-0042 (ticket id 200), idle, 2h 14m uptime
+            Spec(ticketID: 200, tmuxSession: "tmux_server_coding_app__session_stream_and_pane_input__feat_tmx_0042_pane_registry",
+                 state: .idle, pane: "agent:0.0", cpu: 2,
+                 startMinutesAgo: 134, lastActiveMinutesAgo: 6),
+            // session-05 → TMX-0047 (ticket id 205), awaiting-input, 4h 02m
+            Spec(ticketID: 205, tmuxSession: "tmux_server_coding_app__mobile_client_planning__feat_tmx_0047_context_bundle",
+                 state: .awaitingInput, pane: "agent:1.0", cpu: 0,
+                 startMinutesAgo: 242, lastActiveMinutesAgo: 12),
+            // session-07 → TMX-0050 (ticket id 208), active, 47m
+            Spec(ticketID: 208, tmuxSession: "remote_coding_ios__project_hierarchy_prototype__feat_tmx_0050_diff_viewer",
+                 state: .active, pane: "agent:2.0", cpu: 31,
+                 startMinutesAgo: 47, lastActiveMinutesAgo: 1),
+            // session-08 → TMX-0048 (ticket id 206), active, 22m
+            Spec(ticketID: 206, tmuxSession: "tmux_server_coding_app__mobile_client_planning__feat_tmx_0048_prd_resolver",
+                 state: .active, pane: "agent:1.1", cpu: 18,
+                 startMinutesAgo: 22, lastActiveMinutesAgo: 1)
+        ]
+
+        var sessions: [Components.Schemas.AgentSession] = []
+        var sessionID: Int64 = 800
+        let now = Date()
+
+        for spec in specs {
+            sessions.append(Components.Schemas.AgentSession(
+                id: sessionID,
+                ticketId: spec.ticketID,
+                tmuxSession: spec.tmuxSession,
+                state: spec.state,
+                pane: spec.pane,
+                cpu: spec.cpu,
+                startTime: now.addingTimeInterval(-spec.startMinutesAgo * 60),
+                endTime: nil,
+                lastActiveAt: now.addingTimeInterval(-spec.lastActiveMinutesAgo * 60),
+                transcriptKey: nil,
+                tokenUsage: nil,
+                costEstimate: nil,
+                createdAt: now.addingTimeInterval(-spec.startMinutesAgo * 60)
+            ))
+            sessionID += 1
+        }
+
+        return (sessions, sessionID)
+    }
+
+    // Seeds a fixture TicketDiff for TMX-0050 (the design's example).
+    // Two FileDiffs — one .modified, one .added — with old / new
+    // content five-plus lines apart so a unified-diff render exercises
+    // +/- and context lines plus a hunk header.
+    static func seedTicketDiffs() -> [String: Components.Schemas.TicketDiff] {
+        let modifiedOld = """
+        struct DiffViewer: View {
+            let files: [FileDiff]
+            var body: some View {
+                List(files) { file in
+                    Text(file.path)
+                }
+            }
+        }
+        """
+        let modifiedNew = """
+        struct DiffViewer: View {
+            let files: [FileDiff]
+            @State private var selected: FileDiff?
+            var body: some View {
+                NavigationSplitView {
+                    List(files, selection: $selected) { file in
+                        DiffFileRow(file: file)
+                    }
+                } detail: {
+                    if let file = selected {
+                        DiffPaneView(file: file)
+                    } else {
+                        ContentUnavailableView("Pick a file", systemImage: "doc.text")
+                    }
+                }
+            }
+        }
+        """
+        let addedNew = """
+        struct DiffPaneView: View {
+            let file: FileDiff
+            var body: some View {
+                ScrollView {
+                    UnifiedDiffText(old: file.oldContent, new: file.newContent)
+                        .font(.system(.body, design: .monospaced))
+                        .padding()
+                }
+                .navigationTitle(file.path)
+            }
+        }
+        """
+        let diff = Components.Schemas.TicketDiff(
+            ticketPublicId: "TMX-0050",
+            base: "main",
+            branch: "feat/tmx-0050-diff-viewer",
+            files: [
+                Components.Schemas.FileDiff(
+                    path: "remote-coding/Features/Review/DiffViewer.swift",
+                    oldPath: nil,
+                    change: .modified,
+                    binary: false,
+                    oldContent: modifiedOld,
+                    newContent: modifiedNew
+                ),
+                Components.Schemas.FileDiff(
+                    path: "remote-coding/Features/Review/DiffPaneView.swift",
+                    oldPath: nil,
+                    change: .added,
+                    binary: false,
+                    oldContent: "",
+                    newContent: addedNew
+                )
+            ]
+        )
+        return ["TMX-0050": diff]
     }
 }
