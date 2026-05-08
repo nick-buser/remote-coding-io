@@ -7,11 +7,22 @@ final class TerminalViewModel {
     var session: Components.Schemas.AgentSession?
     var siblingSessionIDs: [Int64] = []
     var siblingSessions: [Components.Schemas.AgentSession] = []
+    /// Raw string buffer — kept alongside `renderedBuffer` so callers that
+    /// don't yet use the renderer (tests, placeholder views) can read plain text.
     var output = ""
+    /// Attributed buffer produced by the renderer. Views should prefer this
+    /// over `output` once `service-terminal-renderer-boundary` lands.
+    var renderedBuffer = AttributedString()
     var input = ""
     var isLoading = false
     var errorMessage: String?
     var showSpawnSheet = false
+
+    @ObservationIgnored let renderer: any PaneTextRenderer
+
+    init(renderer: any PaneTextRenderer = PlainPaneTextRenderer()) {
+        self.renderer = renderer
+    }
 
     func load(
         sessionID: Int64,
@@ -29,7 +40,7 @@ final class TerminalViewModel {
                 sessionName: s.tmuxSession,
                 paneID: s.paneIndex
             )
-            output = snapshot.content
+            setBuffer(snapshot.content)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -67,7 +78,7 @@ final class TerminalViewModel {
                 sessionName: target.tmuxSession,
                 paneID: target.paneIndex
             )
-            output = snapshot.content
+            setBuffer(snapshot.content)
         } catch {
             errorMessage = "Couldn't reach pane."
         }
@@ -83,7 +94,7 @@ final class TerminalViewModel {
                 sessionName: s.tmuxSession,
                 paneID: s.paneIndex
             )
-            output = snapshot.content
+            setBuffer(snapshot.content)
         } catch {
             errorMessage = "Couldn't reach pane."
         }
@@ -103,10 +114,17 @@ final class TerminalViewModel {
                 sessionName: s.tmuxSession,
                 paneID: s.paneIndex
             )
-            output = snapshot.content
+            setBuffer(snapshot.content)
         } catch {
             errorMessage = "Unable to send input."
         }
+    }
+
+    // MARK: - Private
+
+    private func setBuffer(_ raw: String) {
+        output = raw
+        renderedBuffer = renderer.render(raw)
     }
 }
 

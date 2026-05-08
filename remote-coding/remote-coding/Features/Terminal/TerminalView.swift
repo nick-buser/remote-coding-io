@@ -115,15 +115,20 @@ struct TerminalView: View {
     private var bufferArea: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                Text(viewModel.output.isEmpty ? " " : viewModel.output)
-                    .font(.system(size: 13, design: .monospaced))
-                    .foregroundStyle(Theme.Text.fg(.dark))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(14)
-                    .id("terminalBottom")
+                Group {
+                    if viewModel.renderedBuffer.characters.isEmpty {
+                        Text(" ")
+                    } else {
+                        Text(viewModel.renderedBuffer)
+                    }
+                }
+                .foregroundStyle(Theme.Text.fg(.dark))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                .id("terminalBottom")
             }
             .frame(maxHeight: .infinity)
-            .onChange(of: viewModel.output) {
+            .onChange(of: viewModel.renderedBuffer) {
                 proxy.scrollTo("terminalBottom", anchor: .bottom)
             }
             .onAppear {
