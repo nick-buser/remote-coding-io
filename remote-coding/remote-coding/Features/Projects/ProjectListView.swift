@@ -1,92 +1,171 @@
 import SwiftUI
 
+/// Projects tab body — Pinned + All projects sections.
+///
+/// Reads the workspace repository from `AppModel`, lazy-loads per-row
+/// live session counts via `task(id:)`, and pushes
+/// `.projectDetail(idOrSlug:)` on tap. Long-press exposes
+/// Pin / Unpin (wired) and Edit / Open in tmux / Delete (stubbed —
+/// land in `service-projects-edit` and `service-projects-create`).
 struct ProjectListView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(RootCoordinator.self) private var coordinator
+    @Environment(\.colorScheme) private var scheme
     @State private var viewModel = ProjectListViewModel()
+    @State private var showCreateSheet = false
 
     var body: some View {
-        Group {
-            if viewModel.isLoading && viewModel.projects.isEmpty {
-                ProgressView()
-            } else if let errorMessage = viewModel.errorMessage {
-                ContentUnavailableView("Projects unavailable", systemImage: "wifi.exclamationmark", description: Text(errorMessage))
-            } else {
-                List(viewModel.projects) { project in
-                    Button {
-                        coordinator.push(.projectDetail(idOrSlug: project.slug), in: .projects)
-                    } label: {
-                        ProjectRow(project: project)
-                    }
-                    .buttonStyle(.plain)
-                }
-                .listStyle(.insetGrouped)
+        ScrollView {
+            VStack(alignment: .leading, spacing: Theme.Spacing.s4) {
+                header
+                content
             }
+            .padding(.bottom, Theme.Spacing.s5)
         }
+        .background(Theme.Surface.bg(scheme))
+        .toolbar(.hidden, for: .navigationBar)
         .task {
             await viewModel.load(repository: appModel.repository)
         }
         .refreshable {
             await viewModel.load(repository: appModel.repository)
         }
+        .sheet(isPresented: $showCreateSheet) {
+            EmptyState(
+                systemImage: "plus.rectangle.on.rectangle",
+                title: "Create project",
+                message: "The create-project sheet ships in service-projects-create."
+            )
+            .presentationDetents([.medium])
+        }
     }
-}
 
-private struct ProjectRow: View {
-    let project: Components.Schemas.Project
+    // MARK: - Header
 
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: project.icon ?? "folder")
-                .frame(width: 30, height: 30)
-                .foregroundStyle(.white)
-                .background(accentColor, in: RoundedRectangle(cornerRadius: 7))
+    private var header: some View {
+        LargeTitleHeader(title: "Projects", subtitle: viewModel.subtitle()) {
+            HStack(spacing: 8) {
+                NavIconButton(name: .search) {
+                    // Search sheet ships in a follow-up.
+                }
+                NavIconButton(name: .plus, accent: appModel.accent, tinted: true) {
+                    showCreateSheet = true
+                }
+            }
+        }
+    }
 
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(project.name)
-                        .font(.headline)
-                    if project.pinned {
-                        Image(systemName: "pin.fill")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+    // MARK: - Content
+
+    @ViewBuilder
+    private var content: some View {
+        if viewModel.isLoading && viewModel.projects.isEmpty {
+            ProgressView()
+                .frame(maxWidth: .infinity)
+                .padding(.top, Theme.Spacing.s5)
+        } else if let errorMessage = viewModel.errorMessage, viewModel.projects.isEmpty {
+            VStack(spacing: Theme.Spacing.s4) {
+                EmptyState(
+                    systemImage: "wifi.exclamationmark",
+                    title: "Couldn't load projects",
+                    message: errorMessage
+                )
+                Button("Retry") {
+                    Task { await viewModel.load(repository: appModel.repository) }
+                }
+                .buttonStyle(.bordered)
+            }
+            .padding(.top, Theme.Spacing.s4)
+        } else if viewModel.projects.isEmpty {
+            EmptyState(
+                systemImage: "square.grid.2x2",
+                title: "No projects",
+                message: "Tap + to add your first project."
+            )
+            .padding(.top, Theme.Spacing.s5)
+        } else {
+            let pinned = viewModel.pinnedProjects
+            let unpinned = viewModel.unpinnedProjects
+            if !pinned.isEmpty {
+                section(title: "Pinned", projects: pinned)
+            }
+            if !unpinned.isEmpty {
+                section(title: pinned.isEmpty ? "All projects" : "All projects", projects: unpinned)
+            }
+        }
+    }
+
+    private func section(title: String, projects: [Components.Schemas.Project]) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.s2) {
+            Text(title.uppercased())
+                .themeMonoSm()
+                .foregroundStyle(Theme.Text.fg2(scheme))
+                .padding(.horizontal, Theme.Spacing.s4)
+            RoundedCard {
+                VStack(spacing: 8) {
+                    ForEach(Array(projects.enumerated()), id: \.element.id) { index, project in
+                        if index > 0 {
+                            Divider()
+                                .background(Theme.Surface.sep(scheme))
+                        }
+                        rowView(for: project)
                     }
                 }
-                if let tagline = project.tagline {
-                    Text(tagline)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-                Text(project.localRepoPath)
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
             }
-
-            Spacer()
-
-            Chevron()
+            .padding(.horizontal, Theme.Spacing.s4)
         }
-        .padding(.vertical, 6)
-        .contentShape(Rectangle())
     }
 
-    private var accentColor: Color {
-        switch project.accent {
-        case "teal": .teal
-        case "indigo": .indigo
-        case "green": .green
-        default: .blue
+    private func rowView(for project: Components.Schemas.Project) -> some View {
+        ProjectRow(
+            project: project,
+            liveCount: viewModel.liveSessionCounts[project.id],
+            featureCount: viewModel.featureCounts[project.id],
+            onTap: {
+                coordinator.push(.projectDetail(idOrSlug: project.slug), in: .projects)
+            }
+        )
+        .contextMenu {
+            Button {
+                Task { await viewModel.togglePin(for: project, repository: appModel.repository) }
+            } label: {
+                Label(project.pinned ? "Unpin" : "Pin",
+                      systemImage: project.pinned ? "pin.slash" : "pin")
+            }
+            Button { /* edit sheet — service-projects-edit */ } label: {
+                Label("Edit", systemImage: "pencil")
+            }
+            .disabled(true)
+            Button { /* open-in-tmux — wired by terminal phase */ } label: {
+                Label("Open in tmux", systemImage: "terminal")
+            }
+            .disabled(true)
+            Button(role: .destructive) {
+                /* delete — service-projects-edit */
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+            .disabled(true)
+        }
+        .task(id: project.id) {
+            await viewModel.loadLiveSessionCount(for: project, repository: appModel.repository)
         }
     }
 }
 
-#Preview {
+#Preview("Projects — light") {
     NavigationStack {
         ProjectListView()
-            .navigationTitle("Projects")
     }
     .environment(AppModel(repository: MockTmuxAgentRepository()))
     .environment(RootCoordinator())
+}
+
+#Preview("Projects — dark") {
+    NavigationStack {
+        ProjectListView()
+    }
+    .environment(AppModel(repository: MockTmuxAgentRepository()))
+    .environment(RootCoordinator())
+    .preferredColorScheme(.dark)
 }

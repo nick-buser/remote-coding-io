@@ -1,8 +1,8 @@
 ---
 prefix: service
 title: Rebuild Projects list with v2 design — pinned + all sections
-status: todo
-branch:
+status: done
+branch: service-0014
 ---
 
 ## Description
