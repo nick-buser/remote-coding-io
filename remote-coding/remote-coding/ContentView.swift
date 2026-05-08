@@ -63,7 +63,7 @@ struct ContentView: View {
 
             Tab(value: AppTab.you) {
                 NavigationStack(path: coordinator.binding(for: .you)) {
-                    YouTabPlaceholder()
+                    YouView()
                         .navigationDestination(for: AppRoute.self, destination: destinationView)
                 }
             } label: {
@@ -229,40 +229,9 @@ private struct TabPlaceholder: View {
     }
 }
 
-/// You tab placeholder — keeps the existing API base URL form
-/// reachable until `service-you-screen` replaces this body. The
-/// `NavigationStack` lives in `ContentView`; the `NavigationLink`
-/// here pushes a `Components.Schemas`-free destination so the
-/// coordinator path machinery stays focused on `AppRoute`.
-private struct YouTabPlaceholder: View {
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        VStack(spacing: Theme.Spacing.s4) {
-            EmptyState(
-                systemImage: "person.crop.circle",
-                title: "You",
-                message: "Profile, workspace, accent, agent settings. Coming in service-you-screen."
-            )
-
-            NavigationLink {
-                SettingsView()
-            } label: {
-                Label("Backend settings", systemImage: "gearshape")
-                    .font(.system(size: 16, weight: .medium))
-            }
-            .buttonStyle(.bordered)
-            .padding(.bottom, Theme.Spacing.s5)
-        }
-        .frame(maxHeight: .infinity)
-        .background(Theme.Surface.bg(scheme))
-        .navigationTitle("You")
-        .navigationBarTitleDisplayMode(.large)
-    }
-}
-
 #Preview {
     ContentView()
         .environment(AppModel(repository: MockTmuxAgentRepository()))
         .environment(RootCoordinator())
+        .environment(UserPreferences(store: UserDefaults(suiteName: "preview-content") ?? .standard))
 }
