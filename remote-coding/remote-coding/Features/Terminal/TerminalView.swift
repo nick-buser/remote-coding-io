@@ -30,7 +30,14 @@ struct TerminalView: View {
                         )
                     }
                     bufferArea
-                    quickKeysPlaceholder
+                    QuickKeysRow { key in
+                        Task {
+                            await viewModel.sendInput(
+                                .key(key),
+                                repository: appModel.repository
+                            )
+                        }
+                    }
                     inputBarPlaceholder
                 }
             }
@@ -137,14 +144,7 @@ struct TerminalView: View {
         }
     }
 
-    // MARK: - Placeholders (filled by later tickets)
-
-    private var quickKeysPlaceholder: some View {
-        Color.clear
-            .frame(height: 44)
-            .background(Theme.Surface.terminalChrome)
-            .overlay(alignment: .top) { hairline }
-    }
+    // MARK: - Placeholder (filled by service-terminal-input)
 
     private var inputBarPlaceholder: some View {
         HStack {
