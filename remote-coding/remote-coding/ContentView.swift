@@ -45,12 +45,8 @@ struct ContentView: View {
 
             Tab(value: AppTab.roadmap) {
                 NavigationStack(path: coordinator.binding(for: .roadmap)) {
-                    TabPlaceholder(
-                        systemImage: "chart.bar.xaxis",
-                        title: "Roadmap",
-                        message: "Milestone timeline. Coming in service-roadmap-screen."
-                    )
-                    .navigationDestination(for: AppRoute.self, destination: destinationView)
+                    RoadmapView()
+                        .navigationDestination(for: AppRoute.self, destination: destinationView)
                 }
             } label: {
                 Label("Roadmap", systemImage: "chart.bar.xaxis")
@@ -58,12 +54,8 @@ struct ContentView: View {
 
             Tab(value: AppTab.sessions) {
                 NavigationStack(path: coordinator.binding(for: .sessions)) {
-                    TabPlaceholder(
-                        systemImage: "terminal",
-                        title: "Sessions",
-                        message: "Agent sessions, grouped by state. Coming in service-sessions-list."
-                    )
-                    .navigationDestination(for: AppRoute.self, destination: destinationView)
+                    SessionsListView()
+                        .navigationDestination(for: AppRoute.self, destination: destinationView)
                 }
             } label: {
                 Label("Sessions", systemImage: "terminal")
@@ -71,7 +63,7 @@ struct ContentView: View {
 
             Tab(value: AppTab.you) {
                 NavigationStack(path: coordinator.binding(for: .you)) {
-                    YouTabPlaceholder()
+                    YouView()
                         .navigationDestination(for: AppRoute.self, destination: destinationView)
                 }
             } label: {
@@ -105,7 +97,7 @@ struct ContentView: View {
         case .featureDetail(let featureID):
             FeatureDetailDestination(featureID: featureID)
         case .ticketDetail(let publicID):
-            RoutePlaceholder(label: "Ticket", value: publicID, owner: "service-review-screen")
+            TicketReviewView(publicID: publicID)
         case .docDetail(let docID):
             RoutePlaceholder(label: "Doc", value: String(docID), owner: "service-feature-prd-tab")
         case .sessionsForFeature(let featureID):
@@ -237,40 +229,9 @@ private struct TabPlaceholder: View {
     }
 }
 
-/// You tab placeholder — keeps the existing API base URL form
-/// reachable until `service-you-screen` replaces this body. The
-/// `NavigationStack` lives in `ContentView`; the `NavigationLink`
-/// here pushes a `Components.Schemas`-free destination so the
-/// coordinator path machinery stays focused on `AppRoute`.
-private struct YouTabPlaceholder: View {
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        VStack(spacing: Theme.Spacing.s4) {
-            EmptyState(
-                systemImage: "person.crop.circle",
-                title: "You",
-                message: "Profile, workspace, accent, agent settings. Coming in service-you-screen."
-            )
-
-            NavigationLink {
-                SettingsView()
-            } label: {
-                Label("Backend settings", systemImage: "gearshape")
-                    .font(.system(size: 16, weight: .medium))
-            }
-            .buttonStyle(.bordered)
-            .padding(.bottom, Theme.Spacing.s5)
-        }
-        .frame(maxHeight: .infinity)
-        .background(Theme.Surface.bg(scheme))
-        .navigationTitle("You")
-        .navigationBarTitleDisplayMode(.large)
-    }
-}
-
 #Preview {
     ContentView()
         .environment(AppModel(repository: MockTmuxAgentRepository()))
         .environment(RootCoordinator())
+        .environment(UserPreferences(store: UserDefaults(suiteName: "preview-content") ?? .standard))
 }

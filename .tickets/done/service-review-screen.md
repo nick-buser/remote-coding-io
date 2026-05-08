@@ -1,8 +1,8 @@
 ---
 prefix: service
 title: Build Ticket review screen — diff, criteria, approve/request actions
-status: todo
-branch:
+status: done
+branch: service-0019
 ---
 
 ## Description
