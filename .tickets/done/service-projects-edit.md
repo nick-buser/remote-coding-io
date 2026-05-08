@@ -1,8 +1,8 @@
 ---
 prefix: service
 title: Project edit, pin, status, and delete actions
-status: todo
-branch:
+status: done
+branch: service-0026
 ---
 
 ## Description

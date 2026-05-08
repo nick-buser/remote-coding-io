@@ -167,6 +167,35 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
         return project
     }
 
+    func deleteProject(idOrSlug: String) async throws {
+        guard let index = projects.firstIndex(where: { String($0.id) == idOrSlug || $0.slug == idOrSlug }) else {
+            throw MockRepositoryError.notFound
+        }
+        let projectID = projects[index].id
+        projects.remove(at: index)
+        // Cascade child rows so re-creating a project with the same
+        // slug doesn't see leftovers.
+        let featureIDs = Set(features.filter { $0.projectId == projectID }.map(\.id))
+        features.removeAll { $0.projectId == projectID }
+        agentSessions.removeAll { session in
+            guard let ticketID = session.ticketId else { return false }
+            return tickets.first { $0.id == ticketID }
+                .map { featureIDs.contains($0.featureId) } ?? false
+        }
+        let removedTicketIDs = Set(tickets.filter { featureIDs.contains($0.featureId) }.map(\.id))
+        tickets.removeAll { featureIDs.contains($0.featureId) }
+        for id in removedTicketIDs {
+            criteriaByTicketID.removeValue(forKey: id)
+        }
+        decisions.removeAll { featureIDs.contains($0.featureId) }
+        docs.removeAll { featureIDs.contains($0.featureId) }
+        activityEvents.removeAll { event in
+            event.projectId == projectID
+                || (event.featureId.map { featureIDs.contains($0) } ?? false)
+        }
+        tmuxSessionByProjectID.removeValue(forKey: projectID)
+    }
+
     private static func deriveSlug(from name: String) -> String {
         let lowered = name.lowercased()
         let scalars = lowered.unicodeScalars.map { scalar -> Character in
@@ -199,6 +228,42 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
         }
         features[index].status = body.status
         return features[index]
+    }
+
+    func createFeature(projectIDOrSlug: String, body: Components.Schemas.CreateFeatureRequest) async throws -> Components.Schemas.Feature {
+        guard !body.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw MockRepositoryError.problem(field: "title", code: "required",
+                                              message: "Title is required.")
+        }
+        let project = try await getProject(idOrSlug: projectIDOrSlug)
+        let slug = body.slug?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            ?? Self.deriveSlug(from: body.title)
+        if features.contains(where: { $0.projectId == project.id && $0.slug == slug }) {
+            throw MockRepositoryError.problem(field: "slug", code: "conflict",
+                                              message: "A feature with this slug already exists in the project.")
+        }
+        let id = (features.map(\.id).max() ?? 0) + 1
+        let now = Date()
+        let feature = Components.Schemas.Feature(
+            id: id,
+            projectId: project.id,
+            branchName: body.branchName ?? "feat/\(slug)",
+            slug: slug,
+            title: body.title,
+            vision: body.vision,
+            descriptionDocKey: body.descriptionDocKey,
+            status: body.status ?? .planned,
+            accent: body.accent ?? project.accent ?? "iris",
+            milestone: body.milestone,
+            targetDate: body.targetDate,
+            health: body.health ?? "on-track",
+            tags: body.tags ?? [],
+            progressCached: 0,
+            createdAt: now,
+            mergedAt: nil
+        )
+        features.append(feature)
+        return feature
     }
 
     // MARK: Tickets

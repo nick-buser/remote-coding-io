@@ -84,6 +84,22 @@ final class LiveTmuxAgentRepository: TmuxAgentRepository {
         }
     }
 
+    func deleteProject(idOrSlug: String) async throws {
+        let output = try await client.deleteProject(.init(path: .init(idOrSlug: idOrSlug)))
+        switch output {
+        case .noContent:
+            return
+        case .badRequest(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .notFound(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .serviceUnavailable(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .undocumented(let statusCode, _):
+            throw RepositoryError.http(statusCode)
+        }
+    }
+
     func openProjectSession(idOrSlug: String) async throws -> Components.Schemas.Project {
         let output = try await client.openProjectSession(.init(path: .init(idOrSlug: idOrSlug)))
         switch output {
@@ -147,6 +163,27 @@ final class LiveTmuxAgentRepository: TmuxAgentRepository {
         case .badRequest(let response):
             throw RepositoryError.problem(try response.body.applicationProblemJson)
         case .notFound(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .serviceUnavailable(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .undocumented(let statusCode, _):
+            throw RepositoryError.http(statusCode)
+        }
+    }
+
+    func createFeature(projectIDOrSlug: String, body: Components.Schemas.CreateFeatureRequest) async throws -> Components.Schemas.Feature {
+        let output = try await client.createFeature(.init(
+            path: .init(idOrSlug: projectIDOrSlug),
+            body: .json(body)
+        ))
+        switch output {
+        case .created(let response):
+            return try response.body.json
+        case .badRequest(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .notFound(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .conflict(let response):
             throw RepositoryError.problem(try response.body.applicationProblemJson)
         case .serviceUnavailable(let response):
             throw RepositoryError.problem(try response.body.applicationProblemJson)
