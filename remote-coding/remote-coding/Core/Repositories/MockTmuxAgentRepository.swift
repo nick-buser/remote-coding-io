@@ -127,6 +127,60 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
         return projects[index]
     }
 
+    func createProject(_ body: Components.Schemas.CreateProjectRequest) async throws -> Components.Schemas.Project {
+        // Mirror the contract's required-field validation so the
+        // form's optimistic submit path exercises the same error
+        // shape as the live backend.
+        guard !body.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw MockRepositoryError.problem(field: "name", code: "required",
+                                              message: "Name is required.")
+        }
+        guard !body.localRepoPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw MockRepositoryError.problem(field: "local_repo_path", code: "required",
+                                              message: "Local repo path is required.")
+        }
+        let slug = body.slug?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            ?? Self.deriveSlug(from: body.name)
+        if projects.contains(where: { $0.slug == slug }) {
+            throw MockRepositoryError.problem(field: "slug", code: "conflict",
+                                              message: "A project with this slug already exists.")
+        }
+        let id = (projects.map(\.id).max() ?? 0) + 1
+        let now = Date()
+        let project = Components.Schemas.Project(
+            id: id,
+            name: body.name,
+            slug: slug,
+            gitRepoUrl: body.gitRepoUrl,
+            localRepoPath: body.localRepoPath,
+            tagline: body.tagline,
+            description: body.description,
+            accent: body.accent,
+            icon: body.icon,
+            status: body.status ?? .active,
+            pinned: body.pinned ?? false,
+            lastTouchedAt: now,
+            createdAt: now,
+            updatedAt: now
+        )
+        projects.append(project)
+        return project
+    }
+
+    private static func deriveSlug(from name: String) -> String {
+        let lowered = name.lowercased()
+        let scalars = lowered.unicodeScalars.map { scalar -> Character in
+            if CharacterSet.alphanumerics.contains(scalar) {
+                return Character(scalar)
+            }
+            return "-"
+        }
+        let collapsed = String(scalars)
+            .split(separator: "-", omittingEmptySubsequences: true)
+            .joined(separator: "-")
+        return collapsed.isEmpty ? "project-\(Int.random(in: 1000...9999))" : collapsed
+    }
+
     func listFeatures(projectIDOrSlug: String) async throws -> [Components.Schemas.Feature] {
         let project = try await getProject(idOrSlug: projectIDOrSlug)
         return features.filter { $0.projectId == project.id }
@@ -732,6 +786,27 @@ struct SentInput: Hashable {
 
 enum MockRepositoryError: Error {
     case notFound
+    /// Mirrors a `ProblemDetails` with a single `FieldError` for the
+    /// validation paths exercised by create / edit sheets.
+    case problem(field: String, code: String, message: String)
+}
+
+extension MockRepositoryError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .notFound: return "Not found."
+        case .problem(_, _, let message): return message
+        }
+    }
+}
+
+private extension String {
+    /// Helper for create-project's slug fallback. Returns `nil` when
+    /// trimming would produce an empty string.
+    var nilIfEmpty: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
 }
 
 private extension MockTmuxAgentRepository {

@@ -31,12 +31,11 @@ struct ProjectListView: View {
             await viewModel.load(repository: appModel.repository)
         }
         .sheet(isPresented: $showCreateSheet) {
-            EmptyState(
-                systemImage: "plus.rectangle.on.rectangle",
-                title: "Create project",
-                message: "The create-project sheet ships in service-projects-create."
-            )
-            .presentationDetents([.medium])
+            CreateProjectSheet { project in
+                viewModel.projects.insert(project, at: 0)
+                viewModel.projects = ProjectListViewModel.sorted(viewModel.projects)
+                coordinator.push(.projectDetail(idOrSlug: project.slug), in: .projects)
+            }
         }
     }
 
