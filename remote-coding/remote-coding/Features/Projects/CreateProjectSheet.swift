@@ -1,18 +1,30 @@
 import SwiftUI
 
-/// Modal form for creating a new project.
+/// Modal form for creating or editing a project.
 ///
 /// Hosts a `CreateProjectViewModel`; on success the sheet dismisses
-/// and hands the new `Project` to the parent via `onCreated`. The
-/// caller decides whether to push detail / refresh the list.
+/// and hands the resulting `Project` to the parent via
+/// `onSubmitted`. Pass `existing: nil` (default) for the create
+/// path, or an existing project to pre-fill and route the submit
+/// through `updateProject`.
 struct CreateProjectSheet: View {
-    var onCreated: (Components.Schemas.Project) -> Void
+    let existing: Components.Schemas.Project?
+    var onSubmitted: (Components.Schemas.Project) -> Void
 
     @Environment(AppModel.self) private var appModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
 
-    @State private var viewModel = CreateProjectViewModel()
+    @State private var viewModel: CreateProjectViewModel
+
+    init(
+        existing: Components.Schemas.Project? = nil,
+        onSubmitted: @escaping (Components.Schemas.Project) -> Void
+    ) {
+        self.existing = existing
+        self.onSubmitted = onSubmitted
+        _viewModel = State(initialValue: CreateProjectViewModel(existing: existing))
+    }
 
     var body: some View {
         NavigationStack {
@@ -24,7 +36,7 @@ struct CreateProjectSheet: View {
                 statusSection
             }
             .disabled(viewModel.isSubmitting)
-            .navigationTitle("New project")
+            .navigationTitle(viewModel.mode == .create ? "New project" : "Edit project")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -38,7 +50,7 @@ struct CreateProjectSheet: View {
                         if viewModel.isSubmitting {
                             ProgressView()
                         } else {
-                            Text("Create")
+                            Text(viewModel.mode == .create ? "Create" : "Save changes")
                                 .foregroundStyle(viewModel.accent.value(for: scheme))
                         }
                     }
@@ -175,13 +187,25 @@ struct CreateProjectSheet: View {
 
     private func submit() async {
         await viewModel.submit(repository: appModel.repository) { project in
-            onCreated(project)
+            onSubmitted(project)
             dismiss()
         }
     }
 }
 
-#Preview("CreateProjectSheet") {
+#Preview("CreateProjectSheet — new") {
     CreateProjectSheet { _ in }
         .environment(AppModel(repository: MockTmuxAgentRepository()))
+}
+
+#Preview("CreateProjectSheet — edit") {
+    CreateProjectSheet(
+        existing: ProjectRow.previewProject(
+            name: "tmux server",
+            pinned: true,
+            accent: "iris",
+            icon: "terminal"
+        )
+    ) { _ in }
+    .environment(AppModel(repository: MockTmuxAgentRepository()))
 }

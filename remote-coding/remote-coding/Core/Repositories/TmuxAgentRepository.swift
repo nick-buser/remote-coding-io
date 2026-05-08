@@ -5,6 +5,7 @@ protocol TmuxAgentRepository {
     func getProject(idOrSlug: String) async throws -> Components.Schemas.Project
     func createProject(_ body: Components.Schemas.CreateProjectRequest) async throws -> Components.Schemas.Project
     func updateProject(idOrSlug: String, body: Components.Schemas.UpdateProjectRequest) async throws -> Components.Schemas.Project
+    func deleteProject(idOrSlug: String) async throws
     func listFeatures(projectIDOrSlug: String) async throws -> [Components.Schemas.Feature]
     func getFeature(id: Int64) async throws -> Components.Schemas.Feature
     func updateFeatureStatus(id: Int64, body: Components.Schemas.UpdateFeatureStatusRequest) async throws -> Components.Schemas.Feature

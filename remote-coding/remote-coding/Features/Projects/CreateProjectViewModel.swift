@@ -5,6 +5,11 @@ import Observation
 /// the slug auto-derivation logic, and maps server-side
 /// `ProblemDetails.errors` onto local form fields via
 /// `FieldErrorMapper`.
+///
+/// The same view model also powers the edit flow — pass an existing
+/// `Project` to `init(existing:)` and the form pre-fills, the
+/// submit button reads "Save changes", and `submit(...)` routes to
+/// `updateProject` instead of `createProject`.
 @MainActor
 @Observable
 final class CreateProjectViewModel {
@@ -29,6 +34,37 @@ final class CreateProjectViewModel {
     var fieldErrors: [Field: String] = [:]
     /// Generic banner error (network / undocumented status / etc.)
     var bannerError: String?
+
+    /// When non-nil the form is editing an existing project. The
+    /// `slug` carried here keeps `submit(...)` routed to the right
+    /// `updateProject(idOrSlug:)` even after the user edits it.
+    let existing: Components.Schemas.Project?
+
+    var mode: Mode { existing == nil ? .create : .edit }
+
+    enum Mode: Hashable, Sendable {
+        case create
+        case edit
+    }
+
+    init(existing: Components.Schemas.Project? = nil) {
+        self.existing = existing
+        if let project = existing {
+            self.name = project.name
+            self.slug = project.slug
+            self.gitRepoUrl = project.gitRepoUrl ?? ""
+            self.localRepoPath = project.localRepoPath
+            self.tagline = project.tagline ?? ""
+            self.description = project.description ?? ""
+            self.accent = AccentColor(rawValue: project.accent ?? "") ?? .iris
+            self.icon = project.icon ?? ""
+            self.status = project.status
+            self.pinned = project.pinned
+            // Treat the pre-filled slug as user-supplied so name
+            // edits don't silently rewrite it.
+            self.slugWasManuallyEdited = true
+        }
+    }
 
     enum Field: String, Hashable, Sendable {
         case name
@@ -64,36 +100,63 @@ final class CreateProjectViewModel {
         slug = newSlug
     }
 
-    /// Build the request body from the current form state. Trims
-    /// whitespace and treats empty strings as nil for optional fields.
-    func makeRequest() -> Components.Schemas.CreateProjectRequest {
-        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedSlug = slug.trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolvedSlug = trimmedSlug.isEmpty ? Self.deriveSlug(from: trimmedName) : trimmedSlug
-        let trimmedIcon = icon.trimmingCharacters(in: .whitespacesAndNewlines)
+    /// Build the request body for create-mode submissions. Trims
+    /// whitespace and treats empty strings as nil for optional
+    /// fields.
+    func makeCreateRequest() -> Components.Schemas.CreateProjectRequest {
+        let (trimmedName, resolvedSlug, resolvedIcon, trimmedPath) = sanitisedCore()
         return Components.Schemas.CreateProjectRequest(
             name: trimmedName,
             slug: resolvedSlug,
             gitRepoUrl: gitRepoUrl.trimmedNilIfEmpty,
-            localRepoPath: localRepoPath.trimmingCharacters(in: .whitespacesAndNewlines),
+            localRepoPath: trimmedPath,
             tagline: tagline.trimmedNilIfEmpty,
             description: description.trimmedNilIfEmpty,
             accent: accent.rawValue,
-            icon: trimmedIcon.isEmpty ? Self.deriveIcon(from: trimmedName) : trimmedIcon,
+            icon: resolvedIcon,
             status: status,
             pinned: pinned
         )
     }
 
+    /// Build the PUT-shaped update body for edit-mode submissions.
+    func makeUpdateRequest() -> Components.Schemas.UpdateProjectRequest {
+        let (trimmedName, resolvedSlug, resolvedIcon, trimmedPath) = sanitisedCore()
+        return Components.Schemas.UpdateProjectRequest(
+            name: trimmedName,
+            slug: resolvedSlug,
+            gitRepoUrl: gitRepoUrl.trimmedNilIfEmpty,
+            localRepoPath: trimmedPath,
+            tagline: tagline.trimmedNilIfEmpty,
+            description: description.trimmedNilIfEmpty,
+            accent: accent.rawValue,
+            icon: resolvedIcon,
+            status: status,
+            pinned: pinned
+        )
+    }
+
+    /// Shared field sanitisation between create / update bodies.
+    private func sanitisedCore() -> (name: String, slug: String, icon: String, path: String) {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSlug = slug.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedSlug = trimmedSlug.isEmpty ? Self.deriveSlug(from: trimmedName) : trimmedSlug
+        let trimmedIcon = icon.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedIcon = trimmedIcon.isEmpty ? Self.deriveIcon(from: trimmedName) : trimmedIcon
+        let trimmedPath = localRepoPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (trimmedName, resolvedSlug, resolvedIcon, trimmedPath)
+    }
+
     // MARK: - Submit
 
-    /// Submits the form, dispatching the result through `onCreated` on
-    /// success. On error, populates `fieldErrors` (when a
-    /// `ProblemDetails` carries `errors[]`) or `bannerError`
-    /// (otherwise).
+    /// Submits the form, routing through `createProject` (when
+    /// `existing == nil`) or `updateProject` (otherwise) and
+    /// dispatching the resulting project through `onSubmitted`. On
+    /// error, populates `fieldErrors` (when a `ProblemDetails`
+    /// carries `errors[]`) or `bannerError` (otherwise).
     func submit(
         repository: TmuxAgentRepository,
-        onCreated: @escaping (Components.Schemas.Project) -> Void
+        onSubmitted: @escaping (Components.Schemas.Project) -> Void
     ) async {
         guard canSubmit else { return }
         isSubmitting = true
@@ -101,8 +164,16 @@ final class CreateProjectViewModel {
         fieldErrors = [:]
         bannerError = nil
         do {
-            let project = try await repository.createProject(makeRequest())
-            onCreated(project)
+            let project: Components.Schemas.Project
+            if let existing {
+                project = try await repository.updateProject(
+                    idOrSlug: existing.slug,
+                    body: makeUpdateRequest()
+                )
+            } else {
+                project = try await repository.createProject(makeCreateRequest())
+            }
+            onSubmitted(project)
         } catch let RepositoryError.problem(problem) {
             apply(problem: problem)
         } catch let MockRepositoryError.problem(field, _, message) {

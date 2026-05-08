@@ -14,6 +14,10 @@ struct ProjectDetailView: View {
 
     @State private var viewModel: ProjectDetailViewModel
     @State private var section: String = ProjectDetailSection.features.rawValue
+    @State private var showEditSheet = false
+    @State private var showDeleteConfirm = false
+    @State private var didDelete = false
+    @State private var actionError: String?
 
     init(project: Components.Schemas.Project) {
         _viewModel = State(initialValue: ProjectDetailViewModel(project: project))
@@ -39,6 +43,35 @@ struct ProjectDetailView: View {
         .refreshable {
             await viewModel.load(repository: appModel.repository)
         }
+        .sheet(isPresented: $showEditSheet) {
+            CreateProjectSheet(existing: viewModel.project) { updated in
+                viewModel.project = updated
+            }
+        }
+        .confirmationDialog(
+            "Delete project?",
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Delete \(viewModel.project.name)", role: .destructive) {
+                Task { await deleteProject() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Removes the project and all its features, tickets, docs, decisions, and sessions.")
+        }
+        .alert(
+            "Action failed",
+            isPresented: Binding(
+                get: { actionError != nil },
+                set: { if !$0 { actionError = nil } }
+            ),
+            actions: { Button("OK") { actionError = nil } },
+            message: { Text(actionError ?? "") }
+        )
+        .onChange(of: didDelete) { _, finished in
+            if finished { dismiss() }
+        }
     }
 
     // MARK: - Top bar / hero / stats
@@ -49,9 +82,118 @@ struct ProjectDetailView: View {
         } trailing: {
             HStack(spacing: 8) {
                 NavIconButton(name: .search) { /* search placeholder */ }
-                NavIconButton(name: .dots) { /* dots menu placeholder */ }
+                Menu {
+                    Button {
+                        showEditSheet = true
+                    } label: {
+                        Label("Edit", systemImage: "pencil")
+                    }
+                    Button {
+                        Task { await togglePin() }
+                    } label: {
+                        Label(
+                            viewModel.project.pinned ? "Unpin" : "Pin",
+                            systemImage: viewModel.project.pinned ? "pin.slash" : "pin"
+                        )
+                    }
+                    Button {
+                        Task { await openInTmux() }
+                    } label: {
+                        Label("Open in tmux", systemImage: "terminal")
+                    }
+                    Divider()
+                    Menu("Status") {
+                        Button("Active")  { Task { await setStatus(.active) } }
+                        Button("Maint.")  { Task { await setStatus(.maintenance) } }
+                        Button("Paused")  { Task { await setStatus(.paused) } }
+                    }
+                    Divider()
+                    Button(role: .destructive) {
+                        showDeleteConfirm = true
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundStyle(Theme.Text.fg(scheme))
+                        .frame(width: 28, height: 28)
+                }
+                .accessibilityLabel("Project actions")
             }
         }
+    }
+
+    // MARK: - Project actions
+
+    @MainActor
+    private func togglePin() async {
+        let previous = viewModel.project
+        viewModel.project.pinned.toggle()
+        do {
+            let body = updateBody(from: previous, pinned: !previous.pinned)
+            viewModel.project = try await appModel.repository.updateProject(idOrSlug: previous.slug, body: body)
+        } catch {
+            viewModel.project = previous
+            actionError = "Couldn't update pin: \(error.localizedDescription)"
+        }
+    }
+
+    @MainActor
+    private func setStatus(_ status: Components.Schemas.ProjectStatus) async {
+        guard viewModel.project.status != status else { return }
+        let previous = viewModel.project
+        viewModel.project.status = status
+        do {
+            let body = updateBody(from: previous, status: status)
+            viewModel.project = try await appModel.repository.updateProject(idOrSlug: previous.slug, body: body)
+        } catch {
+            viewModel.project = previous
+            actionError = "Couldn't update status: \(error.localizedDescription)"
+        }
+    }
+
+    @MainActor
+    private func openInTmux() async {
+        do {
+            viewModel.project = try await appModel.repository.openProjectSession(idOrSlug: viewModel.project.slug)
+            // Refresh sessions so the Sessions sub-tab reflects the new
+            // tmux session row immediately.
+            await viewModel.load(repository: appModel.repository)
+        } catch {
+            actionError = "Couldn't open tmux session: \(error.localizedDescription)"
+        }
+    }
+
+    @MainActor
+    private func deleteProject() async {
+        do {
+            try await appModel.repository.deleteProject(idOrSlug: viewModel.project.slug)
+            didDelete = true
+        } catch {
+            actionError = "Couldn't delete project: \(error.localizedDescription)"
+        }
+    }
+
+    /// PUT-shaped update body that round-trips every field from the
+    /// snapshot, optionally overriding `status` and / or `pinned`.
+    private func updateBody(
+        from snapshot: Components.Schemas.Project,
+        status: Components.Schemas.ProjectStatus? = nil,
+        pinned: Bool? = nil
+    ) -> Components.Schemas.UpdateProjectRequest {
+        Components.Schemas.UpdateProjectRequest(
+            name: snapshot.name,
+            slug: snapshot.slug,
+            gitRepoUrl: snapshot.gitRepoUrl,
+            localRepoPath: snapshot.localRepoPath,
+            tagline: snapshot.tagline,
+            description: snapshot.description,
+            accent: snapshot.accent,
+            icon: snapshot.icon,
+            status: status ?? snapshot.status,
+            pinned: pinned ?? snapshot.pinned
+        )
     }
 
     private var hero: some View {

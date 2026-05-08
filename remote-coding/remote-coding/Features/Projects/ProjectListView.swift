@@ -13,6 +13,8 @@ struct ProjectListView: View {
     @Environment(\.colorScheme) private var scheme
     @State private var viewModel = ProjectListViewModel()
     @State private var showCreateSheet = false
+    @State private var editingProject: Components.Schemas.Project?
+    @State private var deletePendingProject: Components.Schemas.Project?
 
     var body: some View {
         ScrollView {
@@ -37,6 +39,44 @@ struct ProjectListView: View {
                 coordinator.push(.projectDetail(idOrSlug: project.slug), in: .projects)
             }
         }
+        .sheet(item: $editingProject) { project in
+            CreateProjectSheet(existing: project) { updated in
+                if let index = viewModel.projects.firstIndex(where: { $0.id == updated.id }) {
+                    viewModel.projects[index] = updated
+                    viewModel.projects = ProjectListViewModel.sorted(viewModel.projects)
+                }
+            }
+        }
+        .confirmationDialog(
+            "Delete project?",
+            isPresented: Binding(
+                get: { deletePendingProject != nil },
+                set: { if !$0 { deletePendingProject = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: deletePendingProject
+        ) { project in
+            Button("Delete \(project.name)", role: .destructive) {
+                Task { await delete(project) }
+            }
+            Button("Cancel", role: .cancel) { deletePendingProject = nil }
+        } message: { _ in
+            Text("Removes the project and all its features, tickets, docs, decisions, and sessions.")
+        }
+    }
+
+    @MainActor
+    private func delete(_ project: Components.Schemas.Project) async {
+        // Optimistic remove with rollback on failure.
+        let previous = viewModel.projects
+        viewModel.projects.removeAll { $0.id == project.id }
+        do {
+            try await appModel.repository.deleteProject(idOrSlug: project.slug)
+        } catch {
+            viewModel.projects = previous
+            viewModel.errorMessage = "Couldn't delete \(project.name): \(error.localizedDescription)"
+        }
+        deletePendingProject = nil
     }
 
     // MARK: - Header
@@ -131,20 +171,16 @@ struct ProjectListView: View {
                 Label(project.pinned ? "Unpin" : "Pin",
                       systemImage: project.pinned ? "pin.slash" : "pin")
             }
-            Button { /* edit sheet — service-projects-edit */ } label: {
+            Button {
+                editingProject = project
+            } label: {
                 Label("Edit", systemImage: "pencil")
             }
-            .disabled(true)
-            Button { /* open-in-tmux — wired by terminal phase */ } label: {
-                Label("Open in tmux", systemImage: "terminal")
-            }
-            .disabled(true)
             Button(role: .destructive) {
-                /* delete — service-projects-edit */
+                deletePendingProject = project
             } label: {
                 Label("Delete", systemImage: "trash")
             }
-            .disabled(true)
         }
         .task(id: project.id) {
             await viewModel.loadLiveSessionCount(for: project, repository: appModel.repository)

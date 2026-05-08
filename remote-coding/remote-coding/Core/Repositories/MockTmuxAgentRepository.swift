@@ -167,6 +167,35 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
         return project
     }
 
+    func deleteProject(idOrSlug: String) async throws {
+        guard let index = projects.firstIndex(where: { String($0.id) == idOrSlug || $0.slug == idOrSlug }) else {
+            throw MockRepositoryError.notFound
+        }
+        let projectID = projects[index].id
+        projects.remove(at: index)
+        // Cascade child rows so re-creating a project with the same
+        // slug doesn't see leftovers.
+        let featureIDs = Set(features.filter { $0.projectId == projectID }.map(\.id))
+        features.removeAll { $0.projectId == projectID }
+        agentSessions.removeAll { session in
+            guard let ticketID = session.ticketId else { return false }
+            return tickets.first { $0.id == ticketID }
+                .map { featureIDs.contains($0.featureId) } ?? false
+        }
+        let removedTicketIDs = Set(tickets.filter { featureIDs.contains($0.featureId) }.map(\.id))
+        tickets.removeAll { featureIDs.contains($0.featureId) }
+        for id in removedTicketIDs {
+            criteriaByTicketID.removeValue(forKey: id)
+        }
+        decisions.removeAll { featureIDs.contains($0.featureId) }
+        docs.removeAll { featureIDs.contains($0.featureId) }
+        activityEvents.removeAll { event in
+            event.projectId == projectID
+                || (event.featureId.map { featureIDs.contains($0) } ?? false)
+        }
+        tmuxSessionByProjectID.removeValue(forKey: projectID)
+    }
+
     private static func deriveSlug(from name: String) -> String {
         let lowered = name.lowercased()
         let scalars = lowered.unicodeScalars.map { scalar -> Character in
