@@ -1,8 +1,8 @@
 ---
 prefix: service
 title: Feature detail Decisions sub-tab — append-only list, log decision sheet
-status: todo
-branch:
+status: done
+branch: service-0023
 ---
 
 ## Description
