@@ -1,8 +1,8 @@
 ---
 prefix: service
 title: Build You tab — profile card and Workspace / Appearance / Agent settings
-status: todo
-branch:
+status: done
+branch: service-0020
 ---
 
 ## Description
