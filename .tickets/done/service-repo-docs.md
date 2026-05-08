@@ -1,7 +1,7 @@
 ---
 prefix: service
 title: Add Doc repository methods and replace the local WorkspaceDocument concept
-status: active
+status: done
 branch: service-0008
 ---
 

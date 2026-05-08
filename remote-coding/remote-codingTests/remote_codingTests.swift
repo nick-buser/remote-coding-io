@@ -329,6 +329,61 @@ struct remote_codingTests {
         #expect(after.count == initial.count - 1)
     }
 
+    // MARK: Feature decisions
+
+    @MainActor
+    @Test func listFeatureDecisionsReturnsNewestFirstAndScopedToFeature() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let onFeature11 = try await repository.listFeatureDecisions(featureID: 11)
+        let onFeature21 = try await repository.listFeatureDecisions(featureID: 21)
+
+        // Each feature owns its own decisions; cross-feature leakage would
+        // be silent until UI shows it on the wrong screen.
+        #expect(onFeature11.allSatisfy { $0.featureId == 11 })
+        #expect(onFeature21.allSatisfy { $0.featureId == 21 })
+        // Spec: createdAt DESC — every consecutive pair is non-increasing.
+        let dates = onFeature11.map(\.createdAt)
+        #expect(dates == dates.sorted(by: >))
+    }
+
+    @MainActor
+    @Test func createFeatureDecisionAttachesActorAndAssignsServerCreatedAt() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let before = Date()
+        let body = Components.Schemas.CreateDecisionRequest(
+            title: "Use Runestone for terminal text",
+            body: "Plain monospaced first; Runestone surface is wired in service-terminal-runestone.",
+            actor: .human,
+            actorName: "Nick"
+        )
+        let created = try await repository.createFeatureDecision(featureID: 12, body: body)
+
+        // Server-assigned id + createdAt; the request never carried either.
+        #expect(created.id >= 700)
+        #expect(created.title == body.title)
+        #expect(created.actor == .human)
+        #expect(created.actorName == "Nick")
+        #expect(created.createdAt >= before)
+        // Created decision appears in the next list call, sorted to the top.
+        let after = try await repository.listFeatureDecisions(featureID: 12)
+        #expect(after.first?.id == created.id)
+    }
+
+    @MainActor
+    @Test func deleteDecisionRemovesItFromTheList() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let initial = try await repository.listFeatureDecisions(featureID: 21)
+        let target = initial.first!
+        try await repository.deleteDecision(id: target.id)
+        let after = try await repository.listFeatureDecisions(featureID: 21)
+
+        #expect(after.contains(where: { $0.id == target.id }) == false)
+        #expect(after.count == initial.count - 1)
+    }
+
     // MARK: Local project notes
 
     @MainActor
