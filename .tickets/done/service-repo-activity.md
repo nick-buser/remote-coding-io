@@ -1,7 +1,7 @@
 ---
 prefix: service
 title: Add ActivityEvent listing and 5-second polling helper
-status: active
+status: done
 branch: service-0010
 ---
 

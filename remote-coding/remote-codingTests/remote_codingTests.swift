@@ -497,6 +497,195 @@ struct remote_codingTests {
         #expect(poller.needsYou == true)
     }
 
+    // MARK: Agent sessions
+
+    @MainActor
+    @Test func listProjectAgentSessionsFiltersByProjectThroughTicket() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let onProject1 = try await repository.listProjectAgentSessions(projectIDOrSlug: "tmux-server-coding-app")
+        let onProject2 = try await repository.listProjectAgentSessions(projectIDOrSlug: "remote-coding-ios")
+
+        // Sessions resolve project membership through ticket → feature →
+        // project. Project 1 owns features 11/12; project 2 owns 21.
+        // Seeded sessions: session-04 (TMX-0042, f11), -05 (TMX-0047, f12),
+        // -07 (TMX-0050, f21), -08 (TMX-0048, f12).
+        #expect(onProject1.count == 3)
+        #expect(onProject2.count == 1)
+        // last_active_at desc — most-recently-active leads.
+        let dates = onProject1.map(\.lastActiveAt)
+        #expect(dates == dates.sorted(by: >))
+    }
+
+    @MainActor
+    @Test func listTicketAgentSessionsFiltersByTicketID() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let onTMX0050 = try await repository.listTicketAgentSessions(ticketPublicID: "TMX-0050")
+        let onTMX0046 = try await repository.listTicketAgentSessions(ticketPublicID: "TMX-0046")
+
+        #expect(onTMX0050.count == 1)
+        #expect(onTMX0050.first?.state == .active)
+        #expect(onTMX0050.first?.cpu == 31)
+        // TMX-0046 has no seeded session — empty list, not 404.
+        #expect(onTMX0046.isEmpty)
+    }
+
+    @MainActor
+    @Test func createAgentSessionDerivesTmuxSessionWhenOmitted() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let body = Components.Schemas.CreateAgentSessionRequest(
+            ticketPublicId: "TMX-0042",
+            tmuxSession: nil,
+            state: nil,
+            pane: nil,
+            cpu: nil
+        )
+        let created = try await repository.createAgentSession(body)
+
+        // Derived format: <project_slug>__<feature_slug>__<branch_slug>.
+        // TMX-0042 hangs off feature 11 (slug session-stream-and-pane-input)
+        // on project 1 (slug tmux-server-coding-app); ticket branch_name is
+        // feat/tmx-0042-pane-registry.
+        #expect(created.tmuxSession.contains("tmux_server_coding_app"))
+        #expect(created.tmuxSession.contains("session_stream_and_pane_input"))
+        #expect(created.tmuxSession.contains("feat_tmx_0042_pane_registry"))
+        // Default state on omit is .idle.
+        #expect(created.state == .idle)
+        #expect(created.ticketId == 200)
+    }
+
+    @MainActor
+    @Test func createAgentSessionEmitsActivityEventOnSpawn() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let before = try await repository.listActivity(project: nil, feature: nil, since: nil, limit: nil)
+        let body = Components.Schemas.CreateAgentSessionRequest(
+            ticketPublicId: "TMX-0050",
+            tmuxSession: "explicit-override",
+            state: .active,
+            pane: "agent:9.0",
+            cpu: 5
+        )
+        let created = try await repository.createAgentSession(body)
+        let after = try await repository.listActivity(project: nil, feature: nil, since: nil, limit: nil)
+
+        // Explicit tmux_session honoured verbatim; the request beats the
+        // derivation rule.
+        #expect(created.tmuxSession == "explicit-override")
+        // Activity feed gains a kind == .check event for the spawn so
+        // the Inbox / poller picks it up. Newest-first means it leads
+        // the after list.
+        #expect(after.count == before.count + 1)
+        #expect(after.first?.kind == .check)
+        #expect(after.first?.ticketId == 208)
+    }
+
+    @MainActor
+    @Test func agentSessionUptimeFormatsHumanReadableDuration() {
+        let now = Date()
+        let twoHourFifteen = Components.Schemas.AgentSession(
+            id: 1, ticketId: nil, tmuxSession: "x", state: .idle,
+            pane: nil, cpu: 0,
+            startTime: now.addingTimeInterval(-(2 * 3600 + 15 * 60)),
+            endTime: nil, lastActiveAt: now,
+            transcriptKey: nil, tokenUsage: nil, costEstimate: nil,
+            createdAt: now
+        )
+        let fortySevenMinutes = Components.Schemas.AgentSession(
+            id: 2, ticketId: nil, tmuxSession: "y", state: .active,
+            pane: nil, cpu: 0,
+            startTime: now.addingTimeInterval(-47 * 60),
+            endTime: nil, lastActiveAt: now,
+            transcriptKey: nil, tokenUsage: nil, costEstimate: nil,
+            createdAt: now
+        )
+        let threeDays = Components.Schemas.AgentSession(
+            id: 3, ticketId: nil, tmuxSession: "z", state: .idle,
+            pane: nil, cpu: 0,
+            startTime: now.addingTimeInterval(-3 * 24 * 3600),
+            endTime: nil, lastActiveAt: now,
+            transcriptKey: nil, tokenUsage: nil, costEstimate: nil,
+            createdAt: now
+        )
+
+        #expect(twoHourFifteen.uptime == "2h 15m")
+        #expect(fortySevenMinutes.uptime == "47m")
+        #expect(threeDays.uptime == "3d")
+    }
+
+    // MARK: Ticket review
+
+    @MainActor
+    @Test func getTicketDiffReturnsFileDiffsWithPopulatedContent() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let diff = try await repository.getTicketDiff(publicID: "TMX-0050")
+
+        // Spec fixture: TMX-0050 carries at least one .modified and one
+        // .added FileDiff with non-empty content.
+        #expect(diff.ticketPublicId == "TMX-0050")
+        #expect(diff.files.count >= 2)
+        #expect(diff.files.contains(where: { $0.change == .modified }))
+        #expect(diff.files.contains(where: { $0.change == .added }))
+        // Non-binary text files must carry old + new content the
+        // unified-diff renderer can paint.
+        let textFiles = diff.files.filter { $0.binary != true }
+        #expect(textFiles.allSatisfy { !$0.newContent.isEmpty || $0.change == .deleted })
+    }
+
+    @MainActor
+    @Test func approveTicketFlipsStatusToDoneAndEmitsApproveActivity() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let beforeActivity = try await repository.listActivity(project: nil, feature: nil, since: nil, limit: nil)
+        let updated = try await repository.approveTicket(publicID: "TMX-0050")
+        let afterActivity = try await repository.listActivity(project: nil, feature: nil, since: nil, limit: nil)
+        let next = try await repository.getTicket(publicID: "TMX-0050")
+
+        #expect(updated.status == .done)
+        #expect(next.status == .done)
+        // ActivityEvent(kind: .approve) lands at the head of the feed.
+        #expect(afterActivity.count == beforeActivity.count + 1)
+        #expect(afterActivity.first?.kind == .approve)
+        #expect(afterActivity.first?.ticketId == 208)
+    }
+
+    @MainActor
+    @Test func requestTicketChangesKeepsStatusInReviewAndCarriesCommentIntoActivity() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let updated = try await repository.requestTicketChanges(
+            publicID: "TMX-0051",
+            comment: "Tighten copy on the empty state."
+        )
+        let activity = try await repository.listActivity(project: nil, feature: nil, since: nil, limit: nil)
+
+        // Spec: status stays in .review — agent pushes more commits to
+        // the same branch.
+        #expect(updated.status == .review)
+        #expect(activity.first?.kind == .review)
+        #expect(activity.first?.detail == "Tighten copy on the empty state.")
+    }
+
+    @MainActor
+    @Test func sendTicketBackDropsStatusToDoingAndEmitsCheckActivity() async throws {
+        let repository = MockTmuxAgentRepository()
+
+        let updated = try await repository.sendTicketBack(
+            publicID: "TMX-0050",
+            comment: "Diff viewer needs a unified mode."
+        )
+        let activity = try await repository.listActivity(project: nil, feature: nil, since: nil, limit: nil)
+
+        // Spec: drops back to .doing — the review failed and more work
+        // is needed on the original branch.
+        #expect(updated.status == .doing)
+        #expect(activity.first?.kind == .check)
+        #expect(activity.first?.detail == "Diff viewer needs a unified mode.")
+    }
+
     // MARK: Local project notes
 
     @MainActor
