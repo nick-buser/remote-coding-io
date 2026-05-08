@@ -37,7 +37,6 @@ struct ContentView: View {
             Tab(value: AppTab.projects) {
                 NavigationStack(path: coordinator.binding(for: .projects)) {
                     ProjectListView()
-                        .navigationTitle("Projects")
                         .navigationDestination(for: AppRoute.self, destination: destinationView)
                 }
             } label: {
