@@ -26,12 +26,8 @@ struct ContentView: View {
         TabView(selection: selectedTabBinding) {
             Tab(value: AppTab.inbox) {
                 NavigationStack(path: coordinator.binding(for: .inbox)) {
-                    TabPlaceholder(
-                        systemImage: "tray",
-                        title: "Inbox",
-                        message: "Activity that needs you lands here. Coming in service-inbox-screen."
-                    )
-                    .navigationDestination(for: AppRoute.self, destination: destinationView)
+                    InboxView()
+                        .navigationDestination(for: AppRoute.self, destination: destinationView)
                 }
             } label: {
                 Label("Inbox", systemImage: "tray")
