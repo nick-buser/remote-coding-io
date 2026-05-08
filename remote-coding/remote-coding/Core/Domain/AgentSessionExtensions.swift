@@ -22,4 +22,20 @@ extension Components.Schemas.AgentSession {
         }
         return "\(minutes)m"
     }
+
+    /// Integer pane index extracted from "agent:<window>.<pane>". The window
+    /// portion is ignored — the REST endpoint takes a pane index relative to
+    /// the active window. Falls back to 0 for missing or malformed values.
+    var paneIndex: Int {
+        guard let pane else { return 0 }
+        let parts = pane.split(separator: ".")
+        guard let last = parts.last, let index = Int(last) else { return 0 }
+        return index
+    }
+
+    /// Displayable "window.pane" label — everything after the "agent:" prefix.
+    var paneDisplayLabel: String {
+        guard let pane, let colonIdx = pane.firstIndex(of: ":") else { return "0.0" }
+        return String(pane[pane.index(after: colonIdx)...])
+    }
 }
