@@ -490,6 +490,72 @@ final class LiveTmuxAgentRepository: TmuxAgentRepository {
         }
     }
 
+    // MARK: Ticket review
+
+    func getTicketDiff(publicID: String) async throws -> Components.Schemas.TicketDiff {
+        let output = try await client.getTicketDiff(.init(path: .init(publicId: publicID)))
+        switch output {
+        case .ok(let response):
+            return try response.body.json
+        case .notFound(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .serviceUnavailable(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .undocumented(let statusCode, _):
+            throw RepositoryError.http(statusCode)
+        }
+    }
+
+    func approveTicket(publicID: String) async throws -> Components.Schemas.Ticket {
+        let output = try await client.approveTicket(.init(path: .init(publicId: publicID)))
+        switch output {
+        case .ok(let response):
+            return try response.body.json
+        case .notFound(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .serviceUnavailable(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .undocumented(let statusCode, _):
+            throw RepositoryError.http(statusCode)
+        }
+    }
+
+    func requestTicketChanges(publicID: String, comment: String?) async throws -> Components.Schemas.Ticket {
+        let body = Components.Schemas.ReviewActionRequest(comment: comment)
+        let output = try await client.requestTicketChanges(.init(
+            path: .init(publicId: publicID),
+            body: .json(body)
+        ))
+        switch output {
+        case .ok(let response):
+            return try response.body.json
+        case .notFound(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .serviceUnavailable(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .undocumented(let statusCode, _):
+            throw RepositoryError.http(statusCode)
+        }
+    }
+
+    func sendTicketBack(publicID: String, comment: String?) async throws -> Components.Schemas.Ticket {
+        let body = Components.Schemas.ReviewActionRequest(comment: comment)
+        let output = try await client.sendTicketBack(.init(
+            path: .init(publicId: publicID),
+            body: .json(body)
+        ))
+        switch output {
+        case .ok(let response):
+            return try response.body.json
+        case .notFound(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .serviceUnavailable(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .undocumented(let statusCode, _):
+            throw RepositoryError.http(statusCode)
+        }
+    }
+
     // MARK: Local project notes (UserDefaults — no contract endpoint yet)
 
     func listProjectDocuments(projectID: Int64) async throws -> [LocalProjectNote] {

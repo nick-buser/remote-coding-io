@@ -1,8 +1,8 @@
 ---
 prefix: service
 title: Add Ticket review actions — diff, approve, request-changes, send-back
-status: todo
-branch:
+status: active
+branch: service-0012
 ---
 
 ## Description
@@ -19,21 +19,21 @@ Depends on `infra-openapi-regen.md` and `service-repo-tickets.md`. See `docs/fea
 
 ## Acceptance criteria
 
-- [ ] `TmuxAgentRepository` adds:
+- [x] `TmuxAgentRepository` adds:
   - `func getTicketDiff(publicID: String) async throws -> Components.Schemas.TicketDiff`
   - `func approveTicket(publicID: String) async throws -> Components.Schemas.Ticket`
   - `func requestTicketChanges(publicID: String, comment: String?) async throws -> Components.Schemas.Ticket`
   - `func sendTicketBack(publicID: String, comment: String?) async throws -> Components.Schemas.Ticket`
-- [ ] `LiveTmuxAgentRepository` wires to `getTicketDiff`, `approveTicket`, `requestTicketChanges`, `sendTicketBack` generated operations. The optional comment serializes as `ReviewActionRequest { comment }`.
-- [ ] `MockTmuxAgentRepository` returns a fixture `TicketDiff` for at least TMX-0050 (the design's example) with at least 2 `FileDiff`s, one with `change == .modified` and one with `change == .added`. `old_content` and `new_content` differ in 5+ lines so a unified-diff render is meaningful.
-- [ ] Mock `approveTicket` flips the ticket's `status` to `done` and emits an `ActivityEvent(kind: .approve)`.
-- [ ] Mock `requestTicketChanges` keeps `status == review`, emits `ActivityEvent(kind: .review, detail: comment)`.
-- [ ] Mock `sendTicketBack` flips `status` to `doing`, emits `ActivityEvent(kind: .check, detail: comment)`.
-- [ ] Tests:
+- [x] `LiveTmuxAgentRepository` wires to `getTicketDiff`, `approveTicket`, `requestTicketChanges`, `sendTicketBack` generated operations. The optional comment serializes as `ReviewActionRequest { comment }`.
+- [x] `MockTmuxAgentRepository` returns a fixture `TicketDiff` for at least TMX-0050 (the design's example) with at least 2 `FileDiff`s, one with `change == .modified` and one with `change == .added`. `old_content` and `new_content` differ in 5+ lines so a unified-diff render is meaningful.
+- [x] Mock `approveTicket` flips the ticket's `status` to `done` and emits an `ActivityEvent(kind: .approve)`.
+- [x] Mock `requestTicketChanges` keeps `status == review`, emits `ActivityEvent(kind: .review, detail: comment)`.
+- [x] Mock `sendTicketBack` flips `status` to `doing`, emits `ActivityEvent(kind: .check, detail: comment)`.
+- [x] Tests:
   - `getTicketDiff` returns a `TicketDiff` with non-empty `files`. `binary == true` files have empty `old_content`/`new_content`.
   - Each review action returns the updated `Ticket` with the new status.
   - Each review action surfaces a corresponding ActivityEvent in the mock activity store.
-- [ ] Project builds.
+- [x] Project builds.
 
 ## Notes
 

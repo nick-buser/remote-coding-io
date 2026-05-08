@@ -1,7 +1,7 @@
 ---
 prefix: service
 title: Add AgentSession repository methods (list / spawn)
-status: active
+status: done
 branch: service-0011
 ---
 

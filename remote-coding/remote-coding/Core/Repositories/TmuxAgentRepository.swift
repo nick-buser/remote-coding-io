@@ -27,6 +27,10 @@ protocol TmuxAgentRepository {
     func listProjectAgentSessions(projectIDOrSlug: String) async throws -> [Components.Schemas.AgentSession]
     func listTicketAgentSessions(ticketPublicID: String) async throws -> [Components.Schemas.AgentSession]
     func createAgentSession(_ body: Components.Schemas.CreateAgentSessionRequest) async throws -> Components.Schemas.AgentSession
+    func getTicketDiff(publicID: String) async throws -> Components.Schemas.TicketDiff
+    func approveTicket(publicID: String) async throws -> Components.Schemas.Ticket
+    func requestTicketChanges(publicID: String, comment: String?) async throws -> Components.Schemas.Ticket
+    func sendTicketBack(publicID: String, comment: String?) async throws -> Components.Schemas.Ticket
     func listProjectDocuments(projectID: Int64) async throws -> [LocalProjectNote]
     func saveDocument(_ document: LocalProjectNote) async throws -> LocalProjectNote
     func openProjectSession(idOrSlug: String) async throws -> Components.Schemas.Project
