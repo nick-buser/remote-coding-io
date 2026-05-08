@@ -102,11 +102,8 @@ struct ContentView: View {
             DocViewerView(docID: docID)
         case .sessionsForFeature(let featureID):
             RoutePlaceholder(label: "Feature sessions", value: String(featureID), owner: "service-feature-sessions-tab")
-        case .agentSession:
-            // Legacy prototype until service-terminal-shell replaces it. The
-            // route carries an `AgentSession.id`; the prototype reads its
-            // own fixture via TerminalView's optional `context:` initializer.
-            TerminalView()
+        case .agentSession(let sessionID):
+            TerminalView(sessionID: sessionID)
         }
     }
 }

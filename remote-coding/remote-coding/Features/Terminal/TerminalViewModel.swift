@@ -4,59 +4,64 @@ import Observation
 @MainActor
 @Observable
 final class TerminalViewModel {
-    var context: TerminalContext?
+    var session: Components.Schemas.AgentSession?
     var output = ""
     var input = ""
     var isLoading = false
     var errorMessage: String?
-    var lastSentRequest: Components.Schemas.SendInputRequest?
 
-    func configure(context: TerminalContext?, repository: TmuxAgentRepository) async {
-        guard self.context != context else {
-            return
-        }
-        self.context = context
-        await reload(repository: repository)
-    }
-
-    func reload(repository: TmuxAgentRepository) async {
-        guard let context else {
-            output = ""
-            return
-        }
+    func load(
+        sessionID: Int64,
+        repository: TmuxAgentRepository,
+        activityPoller: ActivityPoller
+    ) async {
+        guard session == nil else { return }
         isLoading = true
         errorMessage = nil
+        activityPoller.stop()
         do {
-            let snapshot = try await repository.getPaneOutput(sessionName: context.session.name, paneID: context.pane.index)
+            let s = try await repository.getAgentSession(id: sessionID)
+            session = s
+            let snapshot = try await repository.getPaneOutput(
+                sessionName: s.tmuxSession,
+                paneID: s.paneIndex
+            )
             output = snapshot.content
         } catch {
-            errorMessage = "Unable to load pane output."
+            errorMessage = error.localizedDescription
         }
         isLoading = false
     }
 
-    func submit(repository: TmuxAgentRepository) async {
-        await send(.text(input, submit: true), repository: repository)
-        input = ""
-    }
-
-    func sendEnter(repository: TmuxAgentRepository) async {
-        await send(.enterOnly(), repository: repository)
-    }
-
-    func sendKey(_ key: String, repository: TmuxAgentRepository) async {
-        await send(.key(key), repository: repository)
-    }
-
-    private func send(_ request: Components.Schemas.SendInputRequest, repository: TmuxAgentRepository) async {
-        guard let context else {
-            return
-        }
+    func reload(repository: TmuxAgentRepository) async {
+        guard let s = session else { return }
+        isLoading = true
         errorMessage = nil
         do {
-            _ = try await repository.sendPaneInput(sessionName: context.session.name, paneID: context.pane.index, body: request)
-            lastSentRequest = request
-            let snapshot = try await repository.getPaneOutput(sessionName: context.session.name, paneID: context.pane.index)
+            let snapshot = try await repository.getPaneOutput(
+                sessionName: s.tmuxSession,
+                paneID: s.paneIndex
+            )
+            output = snapshot.content
+        } catch {
+            errorMessage = "Couldn't reach pane."
+        }
+        isLoading = false
+    }
+
+    func sendInput(_ request: Components.Schemas.SendInputRequest, repository: TmuxAgentRepository) async {
+        guard let s = session else { return }
+        errorMessage = nil
+        do {
+            _ = try await repository.sendPaneInput(
+                sessionName: s.tmuxSession,
+                paneID: s.paneIndex,
+                body: request
+            )
+            let snapshot = try await repository.getPaneOutput(
+                sessionName: s.tmuxSession,
+                paneID: s.paneIndex
+            )
             output = snapshot.content
         } catch {
             errorMessage = "Unable to send input."

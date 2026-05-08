@@ -497,6 +497,11 @@ final class LiveTmuxAgentRepository: TmuxAgentRepository {
 
     // MARK: Agent sessions
 
+    func getAgentSession(id: Int64) async throws -> Components.Schemas.AgentSession {
+        // No direct GET /sessions/{id} endpoint yet; placeholder until the contract adds it.
+        throw RepositoryError.unsupported("getAgentSession(id:) requires a contract update.")
+    }
+
     func listProjectAgentSessions(projectIDOrSlug: String) async throws -> [Components.Schemas.AgentSession] {
         let output = try await client.listProjectSessions(.init(path: .init(idOrSlug: projectIDOrSlug)))
         switch output {

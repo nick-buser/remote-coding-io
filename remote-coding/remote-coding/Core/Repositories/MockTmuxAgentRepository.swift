@@ -67,7 +67,9 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
         let iOSOutput = Self.decode(Components.Schemas.PaneOutput.self, from: Self.iOSPaneOutputJSON)
         outputsByPane = [
             "tmux_server_coding_app:0": output,
-            "remote_coding_ios:0": iOSOutput
+            "remote_coding_ios:0": iOSOutput,
+            // session-07 (id=802) pane "agent:2.0" → paneIndex 0
+            "remote_coding_ios__project_hierarchy_prototype__feat_tmx_0050_diff_viewer:0": iOSOutput
         ]
 
         localNotes = Self.seedLocalNotes
@@ -546,6 +548,13 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
     }
 
     // MARK: Agent sessions
+
+    func getAgentSession(id: Int64) async throws -> Components.Schemas.AgentSession {
+        guard let session = agentSessions.first(where: { $0.id == id }) else {
+            throw MockRepositoryError.notFound
+        }
+        return session
+    }
 
     func listProjectAgentSessions(projectIDOrSlug: String) async throws -> [Components.Schemas.AgentSession] {
         let project = try await getProject(idOrSlug: projectIDOrSlug)
