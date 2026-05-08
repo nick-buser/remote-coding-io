@@ -1,8 +1,8 @@
 ---
 prefix: service
 title: Rebuild Feature detail with hero, progress, segmented tabs
-status: todo
-branch:
+status: done
+branch: service-0016
 ---
 
 ## Description
