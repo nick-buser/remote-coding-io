@@ -19,6 +19,9 @@ struct TerminalView: View {
                 VStack(spacing: 0) {
                     contextBar
                     hairline
+                    if case .disconnected = viewModel.socketStatus {
+                        reconnectingPill
+                    }
                     if !viewModel.siblingSessions.isEmpty {
                         PaneChipRow(
                             sessions: viewModel.siblingSessions,
@@ -69,7 +72,8 @@ struct TerminalView: View {
             await viewModel.load(
                 sessionID: sessionID,
                 repository: appModel.repository,
-                activityPoller: appModel.activityPoller
+                activityPoller: appModel.activityPoller,
+                apiConfiguration: appModel.apiConfiguration
             )
         }
         .task(id: viewModel.session?.id) {
@@ -88,6 +92,7 @@ struct TerminalView: View {
             .presentationDetents([.medium])
         }
         .onDisappear {
+            viewModel.closeSocket()
             appModel.activityPoller.start(scope: .workspace)
         }
     }
@@ -137,31 +142,40 @@ struct TerminalView: View {
             .frame(height: 0.5)
     }
 
+    private var reconnectingPill: some View {
+        HStack(spacing: 6) {
+            ProgressView()
+                .progressViewStyle(.circular)
+                .tint(Color.white.opacity(0.6))
+                .scaleEffect(0.7)
+            Text("reconnecting…")
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(Color.white.opacity(0.6))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 5)
+        .background(Color.white.opacity(0.08), in: Capsule())
+        .padding(.vertical, 6)
+    }
+
     // MARK: - Buffer
 
     private var bufferArea: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                Group {
-                    if viewModel.renderedBuffer.characters.isEmpty {
-                        Text(" ")
-                    } else {
-                        Text(viewModel.renderedBuffer)
-                    }
-                }
-                .foregroundStyle(Theme.Text.fg(.dark))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(14)
-                .id("terminalBottom")
-            }
-            .frame(maxHeight: .infinity)
-            .onChange(of: viewModel.renderedBuffer) {
-                proxy.scrollTo("terminalBottom", anchor: .bottom)
-            }
-            .onAppear {
-                proxy.scrollTo("terminalBottom", anchor: .bottom)
-            }
+        GeometryReader { geo in
+            RunestoneTerminalBuffer(
+                attributedText: viewModel.renderedBuffer,
+                onSizeChange: { sendResize(for: geo.size) }
+            )
+            .onAppear { sendResize(for: geo.size) }
+            .onChange(of: geo.size) { sendResize(for: geo.size) }
         }
+    }
+
+        private func sendResize(for size: CGSize) {
+        // Approximate character grid from the monospaced 13pt font (~7.8pt wide, 18pt tall).
+        let cols = max(1, Int(size.width / 7.8))
+        let rows = max(1, Int(size.height / 18))
+        Task { await viewModel.sendResize(cols: cols, rows: rows) }
     }
 
     // MARK: - Error
@@ -178,6 +192,76 @@ struct TerminalView: View {
             }
             .buttonStyle(.borderedProminent)
         }
+    }
+}
+
+// MARK: - Runestone terminal buffer with sticky-bottom
+
+/// UIViewRepresentable bridge that wraps RunestoneTextSurface and adds
+/// sticky-bottom scrolling: when the user is at the bottom, new content
+/// scrolls the view down automatically; when scrolled up, position is
+/// preserved.
+private struct RunestoneTerminalBuffer: UIViewRepresentable {
+    var attributedText: AttributedString
+    var onSizeChange: (() -> Void)?
+
+    func makeUIView(context: Context) -> RunestoneScrollContainer {
+        let container = RunestoneScrollContainer()
+        container.configure()
+        return container
+    }
+
+    func updateUIView(_ container: RunestoneScrollContainer, context: Context) {
+        let plain = String(attributedText.characters)
+        guard container.textView.text != plain else { return }
+        let wasAtBottom = container.isAtBottom
+        container.textView.setState(TextViewState(text: plain))
+        if wasAtBottom {
+            container.scrollToBottom(animated: false)
+        }
+        onSizeChange?()
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    final class Coordinator: NSObject {}
+}
+
+final class RunestoneScrollContainer: UIView {
+    let textView = TextView()
+
+    func configure() {
+        textView.isEditable = false
+        textView.isScrollEnabled = true
+        textView.backgroundColor = UIColor(Theme.Surface.terminalBg)
+        textView.font = UIFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        textView.textColor = UIColor(Theme.Text.fg(.dark))
+        textView.contentInset = UIEdgeInsets(top: 14, left: 14, bottom: 14, right: 14)
+        textView.showLineNumbers = false
+        textView.lineWrappingEnabled = false
+        textView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(textView)
+        NSLayoutConstraint.activate([
+            textView.topAnchor.constraint(equalTo: topAnchor),
+            textView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            textView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            textView.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+    }
+
+    var isAtBottom: Bool {
+        let offset = textView.contentOffset.y
+        let height = textView.frame.height
+        let contentHeight = textView.contentSize.height
+        return offset + height >= contentHeight - 20
+    }
+
+    func scrollToBottom(animated: Bool) {
+        let contentHeight = textView.contentSize.height
+        let frameHeight = textView.frame.height
+        guard contentHeight > frameHeight else { return }
+        let target = CGPoint(x: 0, y: contentHeight - frameHeight)
+        textView.setContentOffset(target, animated: animated)
     }
 }
 
