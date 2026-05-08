@@ -97,7 +97,7 @@ struct ContentView: View {
         case .featureDetail(let featureID):
             FeatureDetailDestination(featureID: featureID)
         case .ticketDetail(let publicID):
-            RoutePlaceholder(label: "Ticket", value: publicID, owner: "service-review-screen")
+            TicketReviewView(publicID: publicID)
         case .docDetail(let docID):
             RoutePlaceholder(label: "Doc", value: String(docID), owner: "service-feature-prd-tab")
         case .sessionsForFeature(let featureID):
