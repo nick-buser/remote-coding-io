@@ -11,6 +11,26 @@ enum ActivityKind: Hashable, Sendable {
     case decision
     case test
     case doc
+    case check
+    case approve
+}
+
+extension ActivityKind {
+    /// Adapter from the generated OpenAPI enum so view code can hand a
+    /// raw `event.kind` straight to `KindIcon`. Kept here to keep the
+    /// adapter and visual mapping in one place.
+    init(_ apiKind: Components.Schemas.ActivityKind) {
+        switch apiKind {
+        case .commit:   self = .commit
+        case .check:    self = .check
+        case .review:   self = .review
+        case .doc:      self = .doc
+        case .decision: self = .decision
+        case .question: self = .question
+        case .test:     self = .test
+        case .approve:  self = .approve
+        }
+    }
 }
 
 private extension ActivityKind {
@@ -22,6 +42,8 @@ private extension ActivityKind {
         case .decision: return "◆"
         case .test:     return "✓"
         case .doc:      return "✎"
+        case .check:    return "☑"
+        case .approve:  return "✓"
         }
     }
 
@@ -33,6 +55,8 @@ private extension ActivityKind {
         case .decision: return AccentColor.mint.value(for: scheme)
         case .test:     return Theme.Text.fg3(scheme)
         case .doc:      return AccentColor.amber.value(for: scheme)
+        case .check:    return Theme.Semantic.green
+        case .approve:  return AccentColor.mint.value(for: scheme)
         }
     }
 }
@@ -79,6 +103,8 @@ struct KindDot: View {
         KindIcon(kind: .decision)
         KindIcon(kind: .test)
         KindIcon(kind: .doc)
+        KindIcon(kind: .check)
+        KindIcon(kind: .approve)
     }
     .padding()
     .background(Theme.Surface.bg(.light))
@@ -92,6 +118,8 @@ struct KindDot: View {
         KindIcon(kind: .decision)
         KindIcon(kind: .test)
         KindIcon(kind: .doc)
+        KindIcon(kind: .check)
+        KindIcon(kind: .approve)
     }
     .padding()
     .background(Theme.Surface.bg(.dark))
@@ -108,6 +136,8 @@ struct KindDot: View {
                 KindDot(kind: .decision)
                 KindDot(kind: .test)
                 KindDot(kind: .doc)
+                KindDot(kind: .check)
+                KindDot(kind: .approve)
             }
         }
         .padding()
@@ -121,6 +151,8 @@ struct KindDot: View {
                 KindDot(kind: .decision)
                 KindDot(kind: .test)
                 KindDot(kind: .doc)
+                KindDot(kind: .check)
+                KindDot(kind: .approve)
             }
         }
         .padding()

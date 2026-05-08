@@ -1,8 +1,8 @@
 ---
 prefix: service
 title: Build Inbox screen with activity feed and inline actions
-status: todo
-branch:
+status: done
+branch: service-0013
 ---
 
 ## Description
