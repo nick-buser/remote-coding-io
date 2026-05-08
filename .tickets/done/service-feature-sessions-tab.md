@@ -1,8 +1,8 @@
 ---
 prefix: service
 title: Feature detail Sessions sub-tab — agent sessions list and spawn flow
-status: todo
-branch:
+status: done
+branch: service-0024
 ---
 
 ## Description
