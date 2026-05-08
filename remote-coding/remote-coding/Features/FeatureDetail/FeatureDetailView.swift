@@ -145,7 +145,7 @@ struct FeatureDetailView: View {
         } else {
             switch FeatureDetailSection.from(label: section) {
             case .tickets:   ticketsBody
-            case .prd:       prdSummary
+            case .prd:       prdBody
             case .decisions: decisionsSummary
             case .sessions:  sessionsSummary
             }
@@ -163,13 +163,14 @@ struct FeatureDetailView: View {
         )
     }
 
-    private var prdSummary: some View {
-        EmptyState(
-            systemImage: "doc.text",
-            title: "PRD — \(viewModel.docs.count) doc\(viewModel.docs.count == 1 ? "" : "s")",
-            message: "TipTap renderer lands in service-feature-prd-tab."
+    private var prdBody: some View {
+        FeaturePRDTab(
+            viewModel: viewModel,
+            accent: viewModel.accentColor,
+            onSelect: { doc in
+                coordinator.push(.docDetail(docID: doc.id))
+            }
         )
-        .padding(.horizontal, Theme.Spacing.s4)
     }
 
     private var decisionsSummary: some View {

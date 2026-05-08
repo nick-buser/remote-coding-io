@@ -1,8 +1,8 @@
 ---
 prefix: service
 title: Feature detail PRD sub-tab — doc list and read-only TipTap renderer
-status: todo
-branch:
+status: done
+branch: service-0022
 ---
 
 ## Description
