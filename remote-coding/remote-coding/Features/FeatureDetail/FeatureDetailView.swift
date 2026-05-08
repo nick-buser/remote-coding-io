@@ -16,6 +16,7 @@ struct FeatureDetailView: View {
 
     @State private var viewModel: FeatureDetailViewModel
     @State private var section: String = FeatureDetailSection.tickets.rawValue
+    @State private var showCreateTicketSheet = false
 
     init(project: Components.Schemas.Project, feature: Components.Schemas.Feature) {
         _viewModel = State(initialValue: FeatureDetailViewModel(project: project, feature: feature))
@@ -44,6 +45,11 @@ struct FeatureDetailView: View {
         }
         .refreshable {
             await viewModel.load(repository: appModel.repository)
+        }
+        .sheet(isPresented: $showCreateTicketSheet) {
+            CreateTicketSheet(featureID: viewModel.feature.id, accent: viewModel.accentColor) { created in
+                viewModel.tickets.insert(created, at: 0)
+            }
         }
     }
 
@@ -138,7 +144,7 @@ struct FeatureDetailView: View {
             .padding(.top, Theme.Spacing.s4)
         } else {
             switch FeatureDetailSection.from(label: section) {
-            case .tickets:   ticketsSummary
+            case .tickets:   ticketsBody
             case .prd:       prdSummary
             case .decisions: decisionsSummary
             case .sessions:  sessionsSummary
@@ -146,16 +152,15 @@ struct FeatureDetailView: View {
         }
     }
 
-    /// Each sub-tab summary renders an `EmptyState` carrying the
-    /// future-ticket name plus a count snapshot from the loaded data —
-    /// enough to confirm the wire-up without claiming the body's done.
-    private var ticketsSummary: some View {
-        EmptyState(
-            systemImage: "list.bullet.rectangle",
-            title: "Tickets — \(viewModel.tickets.count) loaded",
-            message: "List body lands in service-feature-tickets-tab."
+    private var ticketsBody: some View {
+        FeatureTicketsTab(
+            viewModel: viewModel,
+            showCreateSheet: $showCreateTicketSheet,
+            repository: appModel.repository,
+            onSelect: { ticket in
+                coordinator.push(.ticketDetail(publicID: ticket.publicId))
+            }
         )
-        .padding(.horizontal, Theme.Spacing.s4)
     }
 
     private var prdSummary: some View {
@@ -190,7 +195,7 @@ struct FeatureDetailView: View {
     private var footerActions: some View {
         HStack(spacing: 8) {
             PillButton(title: "+ New ticket", role: .primary, accent: viewModel.accentColor, wide: true) {
-                // Sheet lands in service-feature-tickets-tab.
+                showCreateTicketSheet = true
             }
             PillButton(title: "Spawn session", role: .secondary, accent: viewModel.accentColor, wide: true) {
                 // Sheet lands in service-feature-sessions-tab.

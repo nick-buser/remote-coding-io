@@ -1,8 +1,8 @@
 ---
 prefix: service
 title: Feature detail Tickets sub-tab — list, create, status update
-status: todo
-branch:
+status: done
+branch: service-0021
 ---
 
 ## Description
