@@ -230,6 +230,42 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
         return features[index]
     }
 
+    func createFeature(projectIDOrSlug: String, body: Components.Schemas.CreateFeatureRequest) async throws -> Components.Schemas.Feature {
+        guard !body.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw MockRepositoryError.problem(field: "title", code: "required",
+                                              message: "Title is required.")
+        }
+        let project = try await getProject(idOrSlug: projectIDOrSlug)
+        let slug = body.slug?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            ?? Self.deriveSlug(from: body.title)
+        if features.contains(where: { $0.projectId == project.id && $0.slug == slug }) {
+            throw MockRepositoryError.problem(field: "slug", code: "conflict",
+                                              message: "A feature with this slug already exists in the project.")
+        }
+        let id = (features.map(\.id).max() ?? 0) + 1
+        let now = Date()
+        let feature = Components.Schemas.Feature(
+            id: id,
+            projectId: project.id,
+            branchName: body.branchName ?? "feat/\(slug)",
+            slug: slug,
+            title: body.title,
+            vision: body.vision,
+            descriptionDocKey: body.descriptionDocKey,
+            status: body.status ?? .planned,
+            accent: body.accent ?? project.accent ?? "iris",
+            milestone: body.milestone,
+            targetDate: body.targetDate,
+            health: body.health ?? "on-track",
+            tags: body.tags ?? [],
+            progressCached: 0,
+            createdAt: now,
+            mergedAt: nil
+        )
+        features.append(feature)
+        return feature
+    }
+
     // MARK: Tickets
 
     func listTickets(featureID: Int64, status: Components.Schemas.TicketStatus?) async throws -> [Components.Schemas.Ticket] {

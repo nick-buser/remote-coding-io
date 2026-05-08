@@ -15,6 +15,7 @@ struct ProjectDetailView: View {
     @State private var viewModel: ProjectDetailViewModel
     @State private var section: String = ProjectDetailSection.features.rawValue
     @State private var showEditSheet = false
+    @State private var showCreateFeatureSheet = false
     @State private var showDeleteConfirm = false
     @State private var didDelete = false
     @State private var actionError: String?
@@ -46,6 +47,12 @@ struct ProjectDetailView: View {
         .sheet(isPresented: $showEditSheet) {
             CreateProjectSheet(existing: viewModel.project) { updated in
                 viewModel.project = updated
+            }
+        }
+        .sheet(isPresented: $showCreateFeatureSheet) {
+            CreateFeatureSheet(parentSlug: viewModel.project.slug) { feature in
+                viewModel.features.insert(feature, at: 0)
+                coordinator.push(.featureDetail(featureID: feature.id), in: .projects)
             }
         }
         .confirmationDialog(
@@ -289,10 +296,19 @@ struct ProjectDetailView: View {
                 EmptyState(
                     systemImage: "rectangle.stack",
                     title: "No features yet",
-                    message: "Add a feature from the project hub to start scoping work."
+                    message: "Add a feature to start scoping work for this project."
                 )
             }
+            featuresFooter
         }
+    }
+
+    private var featuresFooter: some View {
+        PillButton(title: "+ New feature", role: .secondary, accent: appModel.accent, wide: true) {
+            showCreateFeatureSheet = true
+        }
+        .padding(.horizontal, Theme.Spacing.s4)
+        .padding(.top, Theme.Spacing.s2)
     }
 
     private var ticketsBody: some View {
