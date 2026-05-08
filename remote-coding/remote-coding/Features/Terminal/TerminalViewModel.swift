@@ -15,10 +15,15 @@ final class TerminalViewModel {
     var renderedBuffer = AttributedString()
     var input = ""
     var isLoading = false
+    var isSending = false
     var errorMessage: String?
     var showSpawnSheet = false
 
+    private(set) var socketStatus: WebSocketStatus = .disconnected(nil)
+
     @ObservationIgnored let renderer: any PaneTextRenderer
+    @ObservationIgnored private var socketClient: WebSocketClient?
+    @ObservationIgnored private var streamTask: Task<Void, Never>?
 
     init(renderer: any PaneTextRenderer = PlainPaneTextRenderer()) {
         self.renderer = renderer
@@ -27,7 +32,8 @@ final class TerminalViewModel {
     func load(
         sessionID: Int64,
         repository: TmuxAgentRepository,
-        activityPoller: ActivityPoller
+        activityPoller: ActivityPoller,
+        apiConfiguration: APIConfiguration? = nil
     ) async {
         guard session == nil else { return }
         isLoading = true
@@ -41,6 +47,9 @@ final class TerminalViewModel {
                 paneID: s.paneIndex
             )
             setBuffer(snapshot.content)
+            if let config = apiConfiguration {
+                openSocket(session: s, configuration: config)
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -69,7 +78,12 @@ final class TerminalViewModel {
         } catch { }
     }
 
-    func switchSession(to target: Components.Schemas.AgentSession, repository: TmuxAgentRepository) async {
+    func switchSession(
+        to target: Components.Schemas.AgentSession,
+        repository: TmuxAgentRepository,
+        apiConfiguration: APIConfiguration? = nil
+    ) async {
+        closeSocket()
         session = target
         isLoading = true
         errorMessage = nil
@@ -79,10 +93,21 @@ final class TerminalViewModel {
                 paneID: target.paneIndex
             )
             setBuffer(snapshot.content)
+            if let config = apiConfiguration {
+                openSocket(session: target, configuration: config)
+            }
         } catch {
             errorMessage = "Couldn't reach pane."
         }
         isLoading = false
+    }
+
+    func closeSocket() {
+        streamTask?.cancel()
+        streamTask = nil
+        socketClient?.disconnect()
+        socketClient = nil
+        socketStatus = .disconnected(nil)
     }
 
     func reload(repository: TmuxAgentRepository) async {
@@ -103,6 +128,7 @@ final class TerminalViewModel {
 
     func sendInput(_ request: Components.Schemas.SendInputRequest, repository: TmuxAgentRepository) async {
         guard let s = session else { return }
+        isSending = true
         errorMessage = nil
         do {
             _ = try await repository.sendPaneInput(
@@ -118,9 +144,32 @@ final class TerminalViewModel {
         } catch {
             errorMessage = "Unable to send input."
         }
+        isSending = false
+    }
+
+    func sendResize(cols: Int, rows: Int) async {
+        try? await socketClient?.sendResize(cols: cols, rows: rows)
     }
 
     // MARK: - Private
+
+    private func openSocket(session s: Components.Schemas.AgentSession, configuration: APIConfiguration) {
+        let client = WebSocketClient(
+            configuration: configuration,
+            sessionName: s.tmuxSession,
+            paneID: s.paneIndex
+        )
+        socketClient = client
+        streamTask = Task { [weak self] in
+            guard let self else { return }
+            await client.connect()
+            for await message in client.messages {
+                guard !Task.isCancelled else { break }
+                self.socketStatus = client.status
+                self.setBuffer(message.content)
+            }
+        }
+    }
 
     private func setBuffer(_ raw: String) {
         output = raw

@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		8CFE1A972FA9738800162056 /* OpenAPIURLSession in Frameworks */ = {isa = PBXBuildFile; productRef = 8CFE1A962FA9738800162056 /* OpenAPIURLSession */; };
 		8CFE1A9C2FA9840E00162056 /* OpenAPIRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = 8CFE1A9B2FA9840E00162056 /* OpenAPIRuntime */; };
+		8C1EA2B22FAABC1200000001 /* Runestone in Frameworks */ = {isa = PBXBuildFile; productRef = 8C1EA2B12FAABC1200000001 /* Runestone */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -72,6 +73,7 @@
 			files = (
 				8CFE1A9C2FA9840E00162056 /* OpenAPIRuntime in Frameworks */,
 				8CFE1A972FA9738800162056 /* OpenAPIURLSession in Frameworks */,
+				8C1EA2B22FAABC1200000001 /* Runestone in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -143,6 +145,7 @@
 			packageProductDependencies = (
 				8CFE1A962FA9738800162056 /* OpenAPIURLSession */,
 				8CFE1A9B2FA9840E00162056 /* OpenAPIRuntime */,
+				8C1EA2B12FAABC1200000001 /* Runestone */,
 			);
 			productName = "remote-coding";
 			productReference = 8C8F0AF62FA32AB000E16636 /* remote-coding.app */;
@@ -230,6 +233,7 @@
 				8CFE1A932FA9599B00162056 /* XCRemoteSwiftPackageReference "swift-openapi-urlsession" */,
 				8CFE1A942FA96EB100162056 /* XCRemoteSwiftPackageReference "swift-openapi-generator" */,
 				8CFE1A9A2FA983FF00162056 /* XCRemoteSwiftPackageReference "swift-openapi-runtime" */,
+				8C1EA2B02FAABC1200000001 /* XCRemoteSwiftPackageReference "Runestone" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 8C8F0AF72FA32AB000E16636 /* Products */;
@@ -628,6 +632,14 @@
 				minimumVersion = 1.11.0;
 			};
 		};
+		8C1EA2B02FAABC1200000001 /* XCRemoteSwiftPackageReference "Runestone" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/simonbs/Runestone";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.3.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -645,6 +657,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 8CFE1A9A2FA983FF00162056 /* XCRemoteSwiftPackageReference "swift-openapi-runtime" */;
 			productName = OpenAPIRuntime;
+		};
+		8C1EA2B12FAABC1200000001 /* Runestone */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8C1EA2B02FAABC1200000001 /* XCRemoteSwiftPackageReference "Runestone" */;
+			productName = Runestone;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
