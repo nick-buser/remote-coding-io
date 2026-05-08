@@ -18,6 +18,7 @@ struct FeatureDetailView: View {
     @State private var section: String = FeatureDetailSection.tickets.rawValue
     @State private var showCreateTicketSheet = false
     @State private var showSpawnSessionSheet = false
+    @State private var showEditFeatureSheet = false
 
     init(project: Components.Schemas.Project, feature: Components.Schemas.Feature) {
         _viewModel = State(initialValue: FeatureDetailViewModel(project: project, feature: feature))
@@ -62,6 +63,14 @@ struct FeatureDetailView: View {
                 coordinator.push(.agentSession(sessionID: created.id))
             }
         }
+        .sheet(isPresented: $showEditFeatureSheet) {
+            CreateFeatureSheet(
+                parentSlug: viewModel.project.slug,
+                existing: viewModel.feature
+            ) { updated in
+                viewModel.feature = updated
+            }
+        }
     }
 
     // MARK: - Top bar
@@ -77,8 +86,9 @@ struct FeatureDetailView: View {
                     Button("Mark in review")   { setStatus(.review) }
                     Button("Mark planned")     { setStatus(.planned) }
                     Button("Mark shipped")     { setStatus(.shipped) }
-                    Button("Edit feature") { /* opens edit sheet — service-feature-create */ }
-                        .disabled(true)
+                    Button("Edit feature") {
+                        showEditFeatureSheet = true
+                    }
                 } label: {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 17, weight: .medium))

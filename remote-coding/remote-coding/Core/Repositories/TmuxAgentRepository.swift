@@ -8,6 +8,7 @@ protocol TmuxAgentRepository {
     func deleteProject(idOrSlug: String) async throws
     func listFeatures(projectIDOrSlug: String) async throws -> [Components.Schemas.Feature]
     func getFeature(id: Int64) async throws -> Components.Schemas.Feature
+    func createFeature(projectIDOrSlug: String, body: Components.Schemas.CreateFeatureRequest) async throws -> Components.Schemas.Feature
     func updateFeatureStatus(id: Int64, body: Components.Schemas.UpdateFeatureStatusRequest) async throws -> Components.Schemas.Feature
     func listTickets(featureID: Int64, status: Components.Schemas.TicketStatus?) async throws -> [Components.Schemas.Ticket]
     func getTicket(publicID: String) async throws -> Components.Schemas.Ticket
