@@ -1,8 +1,8 @@
 ---
 prefix: service
 title: ANSI color/style parser plugged into PaneTextRenderer
-status: todo
-branch:
+status: done
+branch: service-0035
 ---
 
 ## Description

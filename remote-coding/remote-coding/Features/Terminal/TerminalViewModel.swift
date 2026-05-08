@@ -25,7 +25,7 @@ final class TerminalViewModel {
     @ObservationIgnored private var socketClient: WebSocketClient?
     @ObservationIgnored private var streamTask: Task<Void, Never>?
 
-    init(renderer: any PaneTextRenderer = PlainPaneTextRenderer()) {
+    init(renderer: any PaneTextRenderer = ANSIPaneTextRenderer()) {
         self.renderer = renderer
     }
 
