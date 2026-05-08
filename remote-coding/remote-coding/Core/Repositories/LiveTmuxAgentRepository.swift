@@ -68,6 +68,22 @@ final class LiveTmuxAgentRepository: TmuxAgentRepository {
         }
     }
 
+    func createProject(_ body: Components.Schemas.CreateProjectRequest) async throws -> Components.Schemas.Project {
+        let output = try await client.createProject(.init(body: .json(body)))
+        switch output {
+        case .created(let response):
+            return try response.body.json
+        case .badRequest(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .conflict(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .serviceUnavailable(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .undocumented(let statusCode, _):
+            throw RepositoryError.http(statusCode)
+        }
+    }
+
     func openProjectSession(idOrSlug: String) async throws -> Components.Schemas.Project {
         let output = try await client.openProjectSession(.init(path: .init(idOrSlug: idOrSlug)))
         switch output {

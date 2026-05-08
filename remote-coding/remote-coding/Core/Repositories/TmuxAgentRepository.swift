@@ -3,6 +3,7 @@ import Foundation
 protocol TmuxAgentRepository {
     func listProjects() async throws -> [Components.Schemas.Project]
     func getProject(idOrSlug: String) async throws -> Components.Schemas.Project
+    func createProject(_ body: Components.Schemas.CreateProjectRequest) async throws -> Components.Schemas.Project
     func updateProject(idOrSlug: String, body: Components.Schemas.UpdateProjectRequest) async throws -> Components.Schemas.Project
     func listFeatures(projectIDOrSlug: String) async throws -> [Components.Schemas.Feature]
     func getFeature(id: Int64) async throws -> Components.Schemas.Feature

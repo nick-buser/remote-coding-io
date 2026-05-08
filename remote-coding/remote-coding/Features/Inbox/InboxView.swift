@@ -253,6 +253,9 @@ private final class EmptyInboxRepository: TmuxAgentRepository {
     func updateProject(idOrSlug: String, body: Components.Schemas.UpdateProjectRequest) async throws -> Components.Schemas.Project {
         try await underlying.updateProject(idOrSlug: idOrSlug, body: body)
     }
+    func createProject(_ body: Components.Schemas.CreateProjectRequest) async throws -> Components.Schemas.Project {
+        try await underlying.createProject(body)
+    }
     func listFeatures(projectIDOrSlug: String) async throws -> [Components.Schemas.Feature] {
         try await underlying.listFeatures(projectIDOrSlug: projectIDOrSlug)
     }
