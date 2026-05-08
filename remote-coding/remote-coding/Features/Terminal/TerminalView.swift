@@ -19,6 +19,9 @@ struct TerminalView: View {
                 VStack(spacing: 0) {
                     contextBar
                     hairline
+                    if case .disconnected = viewModel.socketStatus {
+                        reconnectingPill
+                    }
                     if !viewModel.siblingSessions.isEmpty {
                         PaneChipRow(
                             sessions: viewModel.siblingSessions,
@@ -69,7 +72,8 @@ struct TerminalView: View {
             await viewModel.load(
                 sessionID: sessionID,
                 repository: appModel.repository,
-                activityPoller: appModel.activityPoller
+                activityPoller: appModel.activityPoller,
+                apiConfiguration: appModel.apiConfiguration
             )
         }
         .task(id: viewModel.session?.id) {
@@ -88,6 +92,7 @@ struct TerminalView: View {
             .presentationDetents([.medium])
         }
         .onDisappear {
+            viewModel.closeSocket()
             appModel.activityPoller.start(scope: .workspace)
         }
     }
@@ -137,31 +142,57 @@ struct TerminalView: View {
             .frame(height: 0.5)
     }
 
+    private var reconnectingPill: some View {
+        HStack(spacing: 6) {
+            ProgressView()
+                .progressViewStyle(.circular)
+                .tint(Color.white.opacity(0.6))
+                .scaleEffect(0.7)
+            Text("reconnecting…")
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(Color.white.opacity(0.6))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 5)
+        .background(Color.white.opacity(0.08), in: Capsule())
+        .padding(.vertical, 6)
+    }
+
     // MARK: - Buffer
 
     private var bufferArea: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                Group {
-                    if viewModel.renderedBuffer.characters.isEmpty {
-                        Text(" ")
-                    } else {
-                        Text(viewModel.renderedBuffer)
+        GeometryReader { geo in
+            ScrollViewReader { proxy in
+                ScrollView {
+                    Group {
+                        if viewModel.renderedBuffer.characters.isEmpty {
+                            Text(" ")
+                        } else {
+                            Text(viewModel.renderedBuffer)
+                        }
                     }
+                    .foregroundStyle(Theme.Text.fg(.dark))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14)
+                    .id("terminalBottom")
                 }
-                .foregroundStyle(Theme.Text.fg(.dark))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(14)
-                .id("terminalBottom")
-            }
-            .frame(maxHeight: .infinity)
-            .onChange(of: viewModel.renderedBuffer) {
-                proxy.scrollTo("terminalBottom", anchor: .bottom)
-            }
-            .onAppear {
-                proxy.scrollTo("terminalBottom", anchor: .bottom)
+                .onChange(of: viewModel.renderedBuffer) {
+                    proxy.scrollTo("terminalBottom", anchor: .bottom)
+                }
+                .onAppear {
+                    proxy.scrollTo("terminalBottom", anchor: .bottom)
+                    sendResize(for: geo.size)
+                }
+                .onChange(of: geo.size) { sendResize(for: geo.size) }
             }
         }
+    }
+
+    private func sendResize(for size: CGSize) {
+        // Approximate character grid from the monospaced 13pt font (~7.8pt wide, 18pt tall).
+        let cols = max(1, Int(size.width / 7.8))
+        let rows = max(1, Int(size.height / 18))
+        Task { await viewModel.sendResize(cols: cols, rows: rows) }
     }
 
     // MARK: - Error
