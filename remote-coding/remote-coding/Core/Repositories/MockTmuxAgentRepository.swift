@@ -42,34 +42,33 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
         features = Self.decode([Components.Schemas.Feature].self, from: Self.featuresJSON)
         sessions = Self.decode([Components.Schemas.Session].self, from: Self.sessionsJSON)
         sessionScopes = [
-            "tmux_server_coding_app": SessionScope(projectID: 1, featureID: nil),
-            "tmux_agent_service_0031": SessionScope(projectID: 1, featureID: 11),
-            "remote_coding_ios": SessionScope(projectID: 2, featureID: nil),
-            "remote_coding_ios_service_0001": SessionScope(projectID: 2, featureID: 21)
+            "tmux_agent_main": SessionScope(projectID: 1, featureID: nil),
+            "tmux_agent__agent_pane_multiplexer__feat_tmx_0042_pane_registry": SessionScope(projectID: 1, featureID: 11),
+            "tmux_agent__feature_context_bundle__feat_tmx_0047_context_bundle": SessionScope(projectID: 1, featureID: 12),
+            "tmux_agent__review_diff_checklist__feat_tmx_0050_diff_viewer": SessionScope(projectID: 1, featureID: 13),
+            "sift_main": SessionScope(projectID: 2, featureID: nil)
         ]
         tmuxSessionByProjectID = [
-            1: "tmux_server_coding_app"
-            // Project 2 starts unlinked; openProjectSession assigns it on demand.
+            1: "tmux_agent_main"
+            // Projects 2-4 start unlinked; openProjectSession assigns on demand.
         ]
 
-        let tmuxAgentPanes = Self.decode([Components.Schemas.Pane].self, from: Self.tmuxAgentPanesJSON)
-        let tmuxAgentFeaturePanes = Self.decode([Components.Schemas.Pane].self, from: Self.tmuxAgentFeaturePanesJSON)
-        let iOSProjectPanes = Self.decode([Components.Schemas.Pane].self, from: Self.iOSProjectPanesJSON)
-        let iOSFeaturePanes = Self.decode([Components.Schemas.Pane].self, from: Self.iOSFeaturePanesJSON)
+        let mainPanes = Self.decode([Components.Schemas.Pane].self, from: Self.tmuxAgentPanesJSON)
+        let feature11Panes = Self.decode([Components.Schemas.Pane].self, from: Self.tmuxAgentFeaturePanesJSON)
         panesBySession = [
-            "tmux_server_coding_app": tmuxAgentPanes,
-            "tmux_agent_service_0031": tmuxAgentFeaturePanes,
-            "remote_coding_ios": iOSProjectPanes,
-            "remote_coding_ios_service_0001": iOSFeaturePanes
+            "tmux_agent_main": mainPanes,
+            "tmux_agent__agent_pane_multiplexer__feat_tmx_0042_pane_registry": feature11Panes,
+            "tmux_agent__feature_context_bundle__feat_tmx_0047_context_bundle": feature11Panes,
+            "tmux_agent__review_diff_checklist__feat_tmx_0050_diff_viewer": feature11Panes,
+            "sift_main": feature11Panes
         ]
 
-        let output = Self.decode(Components.Schemas.PaneOutput.self, from: Self.paneOutputJSON)
-        let iOSOutput = Self.decode(Components.Schemas.PaneOutput.self, from: Self.iOSPaneOutputJSON)
+        let mainOutput = Self.decode(Components.Schemas.PaneOutput.self, from: Self.paneOutputJSON)
+        let reviewOutput = Self.decode(Components.Schemas.PaneOutput.self, from: Self.reviewPaneOutputJSON)
         outputsByPane = [
-            "tmux_server_coding_app:0": output,
-            "remote_coding_ios:0": iOSOutput,
+            "tmux_agent_main:0": mainOutput,
             // session-07 (id=802) pane "agent:2.0" → paneIndex 0
-            "remote_coding_ios__project_hierarchy_prototype__feat_tmx_0050_diff_viewer:0": iOSOutput
+            "tmux_agent__review_diff_checklist__feat_tmx_0050_diff_viewer:0": reviewOutput
         ]
 
         localNotes = Self.seedLocalNotes
@@ -831,11 +830,7 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
     }
 
     private func defaultSessionName(for project: Components.Schemas.Project) -> String {
-        switch project.id {
-        case 1: "tmux_server_coding_app"
-        case 2: "remote_coding_ios"
-        default: project.slug.replacingOccurrences(of: "-", with: "_")
-        }
+        "\(project.slug.replacingOccurrences(of: "-", with: "_"))_main"
     }
 
     private static func decode<T: Decodable>(_ type: T.Type, from json: String) -> T {
@@ -888,35 +883,67 @@ private extension MockTmuxAgentRepository {
     [
       {
         "id": 1,
-        "name": "tmux server coding app",
-        "slug": "tmux-server-coding-app",
-        "git_repo_url": "git@github.com:nick-buser/tmux-server-coding-app.git",
-        "local_repo_path": "/Users/nickbuser/Projects/personal_coding/tmux_server_coding_app",
-        "tagline": "Remote coding through managed tmux sessions",
-        "description": "Backend and clients for managing projects, features, and tmux-backed coding sessions.",
-        "accent": "indigo",
+        "name": "tmux-agent",
+        "slug": "tmux-agent",
+        "git_repo_url": "git@github.com:nick-buser/tmux-agent.git",
+        "local_repo_path": "/Users/nickbuser/Projects/tmux-agent",
+        "tagline": "Local agent runner inside tmux",
+        "description": "A solo-dev orchestrator for running multiple Claude/Codex sessions in tmux panes, each bound to a feature's context bundle.",
+        "accent": "iris",
         "icon": "terminal",
         "status": "active",
         "pinned": true,
-        "last_touched_at": "2026-04-30T05:20:00Z",
+        "last_touched_at": "2026-04-25T14:18:00Z",
         "created_at": "2026-04-05T04:00:00Z",
-        "updated_at": "2026-04-30T05:20:00Z"
+        "updated_at": "2026-04-25T14:18:00Z"
       },
       {
         "id": 2,
-        "name": "remote coding iOS",
-        "slug": "remote-coding-ios",
-        "git_repo_url": "git@github.com:nick-buser/remote-coding-io.git",
-        "local_repo_path": "/Users/nickbuser/Projects/personal_coding/tmux_server_coding_app/ios_apps",
-        "tagline": "Native mobile client for tmux-agent",
-        "description": "SwiftUI client for project navigation, feature docs, and mobile terminal I/O.",
-        "accent": "teal",
-        "icon": "iphone",
+        "name": "sift",
+        "slug": "sift",
+        "git_repo_url": "git@github.com:nick-buser/sift.git",
+        "local_repo_path": "/Users/nickbuser/Projects/sift",
+        "tagline": "Local-first log search",
+        "description": "A grep-meets-OpenSearch tool: index every project log directory locally, query with structured filters, no daemon.",
+        "accent": "amber",
+        "icon": "magnifyingglass",
         "status": "active",
+        "pinned": true,
+        "last_touched_at": "2026-04-23T09:00:00Z",
+        "created_at": "2026-03-01T04:00:00Z",
+        "updated_at": "2026-04-23T09:00:00Z"
+      },
+      {
+        "id": 3,
+        "name": "paper-cuts",
+        "slug": "paper-cuts",
+        "git_repo_url": "git@github.com:nick-buser/paper-cuts.git",
+        "local_repo_path": "/Users/nickbuser/Projects/paper-cuts",
+        "tagline": "Personal site + writing",
+        "description": "Static site generator + essays. Mostly content; occasional engine work when a post needs a new layout.",
+        "accent": "mint",
+        "icon": "doc.text",
+        "status": "maintenance",
         "pinned": false,
-        "last_touched_at": "2026-04-30T05:25:00Z",
-        "created_at": "2026-04-30T04:00:00Z",
-        "updated_at": "2026-04-30T05:25:00Z"
+        "last_touched_at": "2026-04-19T10:00:00Z",
+        "created_at": "2025-09-01T04:00:00Z",
+        "updated_at": "2026-04-19T10:00:00Z"
+      },
+      {
+        "id": 4,
+        "name": "ledger-mini",
+        "slug": "ledger-mini",
+        "git_repo_url": "git@github.com:nick-buser/ledger-mini.git",
+        "local_repo_path": "/Users/nickbuser/Projects/ledger-mini",
+        "tagline": "Plain-text accounting CLI",
+        "description": "Hobby project: a single-file accounting tool with envelope budgets and CSV import. No active feature work right now.",
+        "accent": "slate",
+        "icon": "list.number",
+        "status": "paused",
+        "pinned": false,
+        "last_touched_at": "2026-04-04T08:00:00Z",
+        "created_at": "2025-06-01T04:00:00Z",
+        "updated_at": "2026-04-04T08:00:00Z"
       }
     ]
     """
@@ -926,46 +953,145 @@ private extension MockTmuxAgentRepository {
       {
         "id": 11,
         "project_id": 1,
-        "branch_name": "service-0031",
-        "slug": "session-stream-and-pane-input",
-        "title": "Session stream and pane input",
-        "description_doc_key": "features/service-0031/description.md",
+        "branch_name": "feat/agent-pane-multiplexer",
+        "slug": "agent-pane-multiplexer",
+        "title": "Agent pane multiplexer",
+        "vision": "Run multiple agent sessions in a single tmux window with split-pane navigation, scrollback search, and per-pane state badges.",
         "status": "in_progress",
-        "accent": "indigo",
-        "health": "ok",
-        "tags": [],
-        "progress_cached": 0.4,
-        "created_at": "2026-04-29T14:00:00Z",
+        "accent": "iris",
+        "milestone": "v0.4",
+        "health": "on-track",
+        "tags": ["terminal", "agent", "core"],
+        "progress_cached": 0.62,
+        "created_at": "2026-04-10T04:00:00Z",
         "merged_at": null
       },
       {
         "id": 12,
         "project_id": 1,
-        "branch_name": "docs-0032",
-        "slug": "mobile-client-planning",
-        "title": "Mobile client planning",
-        "description_doc_key": "features/docs-0032/description.md",
+        "branch_name": "feat/feature-context-bundle",
+        "slug": "feature-context-bundle",
+        "title": "Feature ↔ session context bundle",
+        "vision": "Bind every agent session to its feature's PRD, design notes, and acceptance checklist so resuming work loads the full context window.",
         "status": "in_progress",
-        "accent": "amber",
-        "health": "ok",
-        "tags": [],
-        "progress_cached": 0.2,
-        "created_at": "2026-04-30T02:00:00Z",
+        "accent": "iris",
+        "milestone": "v0.4",
+        "health": "on-track",
+        "tags": ["agent", "context", "docs"],
+        "progress_cached": 0.34,
+        "created_at": "2026-04-12T04:00:00Z",
         "merged_at": null
+      },
+      {
+        "id": 13,
+        "project_id": 1,
+        "branch_name": "feat/review-diff-checklist",
+        "slug": "review-diff-checklist",
+        "title": "Review surface — diff + acceptance checklist",
+        "vision": "A side-by-side diff with the ticket's acceptance criteria pinned next to it; approve, request changes, or send back to the agent inline.",
+        "status": "review",
+        "accent": "amber",
+        "milestone": "v0.4",
+        "health": "at-risk",
+        "tags": ["review", "ui"],
+        "progress_cached": 0.88,
+        "created_at": "2026-04-15T04:00:00Z",
+        "merged_at": null
+      },
+      {
+        "id": 14,
+        "project_id": 1,
+        "branch_name": "feat/roadmap-timeline",
+        "slug": "roadmap-timeline",
+        "title": "Roadmap timeline view",
+        "vision": "Single horizontal timeline of features by target milestone — drag to reschedule, click to drill in.",
+        "status": "planned",
+        "accent": "mint",
+        "milestone": "v0.5",
+        "health": "planned",
+        "tags": ["ui", "planning"],
+        "progress_cached": 0.05,
+        "created_at": "2026-04-20T04:00:00Z",
+        "merged_at": null
+      },
+      {
+        "id": 15,
+        "project_id": 1,
+        "branch_name": "feat/decisions-log",
+        "slug": "decisions-log",
+        "title": "Per-feature decisions log",
+        "vision": "Append-only log of architectural decisions tied to each feature, surfaced into agent context on resume.",
+        "status": "planned",
+        "accent": "mint",
+        "milestone": "v0.5",
+        "health": "planned",
+        "tags": ["docs", "context"],
+        "progress_cached": 0,
+        "created_at": "2026-04-20T04:00:00Z",
+        "merged_at": null
+      },
+      {
+        "id": 16,
+        "project_id": 1,
+        "branch_name": "feat/sqlite-store",
+        "slug": "sqlite-store",
+        "title": "SQLite store + migrations",
+        "vision": "Local SQLite-backed persistence with auto-migration on boot. No external db dependency.",
+        "status": "shipped",
+        "accent": "slate",
+        "milestone": "v0.3",
+        "health": "shipped",
+        "tags": ["infra", "storage"],
+        "progress_cached": 1,
+        "created_at": "2026-03-20T04:00:00Z",
+        "merged_at": "2026-04-14T10:00:00Z"
       },
       {
         "id": 21,
         "project_id": 2,
-        "branch_name": "service-0001",
-        "slug": "project-hierarchy-prototype",
-        "title": "Project hierarchy prototype",
-        "description_doc_key": "features/service-0001/description.md",
+        "branch_name": "feat/structured-query-grammar",
+        "slug": "structured-query-grammar",
+        "title": "Structured query grammar",
+        "vision": "Parser for filter expressions like `level:error path:~/work` with autocomplete and saved queries.",
         "status": "in_progress",
-        "accent": "teal",
-        "health": "ok",
-        "tags": [],
-        "progress_cached": 0.6,
-        "created_at": "2026-04-30T05:30:00Z",
+        "accent": "amber",
+        "milestone": "v0.2",
+        "health": "on-track",
+        "tags": ["parser", "query"],
+        "progress_cached": 0.41,
+        "created_at": "2026-04-01T04:00:00Z",
+        "merged_at": null
+      },
+      {
+        "id": 22,
+        "project_id": 2,
+        "branch_name": "feat/incremental-indexer",
+        "slug": "incremental-indexer",
+        "title": "Incremental indexer",
+        "vision": "Watch log directories and update the local index without re-scanning. Dedup via inode + offset.",
+        "status": "planned",
+        "accent": "amber",
+        "milestone": "v0.3",
+        "health": "planned",
+        "tags": ["infra", "fs"],
+        "progress_cached": 0,
+        "created_at": "2026-04-05T04:00:00Z",
+        "merged_at": null
+      },
+      {
+        "id": 31,
+        "project_id": 3,
+        "branch_name": "feat/footnote-popovers",
+        "slug": "footnote-popovers",
+        "title": "Footnote popovers",
+        "vision": "Inline preview popovers for footnotes on hover, falling back to anchor scroll on touch.",
+        "status": "planned",
+        "accent": "mint",
+        "milestone": "v1.4",
+        "health": "planned",
+        "tags": ["ui", "reading"],
+        "progress_cached": 0.1,
+        "created_at": "2026-04-08T04:00:00Z",
         "merged_at": null
       }
     ]
@@ -974,32 +1100,39 @@ private extension MockTmuxAgentRepository {
     static let sessionsJSON = """
     [
       {
-        "name": "tmux_server_coding_app",
+        "name": "tmux_agent_main",
         "attached": false,
-        "created": "2026-04-30T05:10:00Z",
+        "created": "2026-04-25T12:00:00Z",
         "windows": 1,
-        "directory": "/Users/nickbuser/Projects/personal_coding/tmux_server_coding_app"
+        "directory": "/Users/nickbuser/Projects/tmux-agent"
       },
       {
-        "name": "tmux_agent_service_0031",
+        "name": "tmux_agent__agent_pane_multiplexer__feat_tmx_0042_pane_registry",
         "attached": false,
-        "created": "2026-04-30T05:40:00Z",
+        "created": "2026-04-25T12:11:00Z",
         "windows": 1,
-        "directory": "/Users/nickbuser/Projects/personal_coding/tmux_server_coding_app"
+        "directory": "/Users/nickbuser/Projects/tmux-agent"
       },
       {
-        "name": "remote_coding_ios",
+        "name": "tmux_agent__feature_context_bundle__feat_tmx_0047_context_bundle",
         "attached": false,
-        "created": "2026-04-30T06:00:00Z",
+        "created": "2026-04-25T10:08:00Z",
         "windows": 1,
-        "directory": "/Users/nickbuser/Projects/personal_coding/tmux_server_coding_app/ios_apps"
+        "directory": "/Users/nickbuser/Projects/tmux-agent"
       },
       {
-        "name": "remote_coding_ios_service_0001",
+        "name": "tmux_agent__review_diff_checklist__feat_tmx_0050_diff_viewer",
         "attached": false,
-        "created": "2026-04-30T06:10:00Z",
+        "created": "2026-04-25T13:43:00Z",
         "windows": 1,
-        "directory": "/Users/nickbuser/Projects/personal_coding/tmux_server_coding_app/ios_apps"
+        "directory": "/Users/nickbuser/Projects/tmux-agent"
+      },
+      {
+        "name": "sift_main",
+        "attached": false,
+        "created": "2026-04-23T08:00:00Z",
+        "windows": 1,
+        "directory": "/Users/nickbuser/Projects/sift"
       }
     ]
     """
@@ -1012,7 +1145,7 @@ private extension MockTmuxAgentRepository {
         "width": 120,
         "height": 40,
         "active": true,
-        "directory": "/Users/nickbuser/Projects/personal_coding/tmux_server_coding_app"
+        "directory": "/Users/nickbuser/Projects/tmux-agent"
       },
       {
         "index": 1,
@@ -1020,7 +1153,7 @@ private extension MockTmuxAgentRepository {
         "width": 120,
         "height": 40,
         "active": false,
-        "directory": "/Users/nickbuser/Projects/personal_coding/tmux_server_coding_app"
+        "directory": "/Users/nickbuser/Projects/tmux-agent"
       }
     ]
     """
@@ -1029,66 +1162,37 @@ private extension MockTmuxAgentRepository {
     [
       {
         "index": 0,
-        "title": "service-0031",
+        "title": "agent",
         "width": 120,
         "height": 40,
         "active": true,
-        "directory": "/Users/nickbuser/Projects/personal_coding/tmux_server_coding_app"
-      }
-    ]
-    """
-
-    static let iOSProjectPanesJSON = """
-    [
-      {
-        "index": 0,
-        "title": "ios-plan",
-        "width": 96,
-        "height": 34,
-        "active": true,
-        "directory": "/Users/nickbuser/Projects/personal_coding/tmux_server_coding_app/ios_apps"
-      }
-    ]
-    """
-
-    static let iOSFeaturePanesJSON = """
-    [
-      {
-        "index": 0,
-        "title": "service-0001",
-        "width": 96,
-        "height": 34,
-        "active": true,
-        "directory": "/Users/nickbuser/Projects/personal_coding/tmux_server_coding_app/ios_apps"
+        "directory": "/Users/nickbuser/Projects/tmux-agent"
       }
     ]
     """
 
     static let paneOutputJSON = """
     {
-      "session_name": "tmux_server_coding_app",
+      "session_name": "tmux_agent_main",
       "pane_index": 0,
-      "content": "$ go test ./...\\nok  github.com/nickbuser/tmux-agent/internal/store/sqlite  0.412s\\n?   github.com/nickbuser/tmux-agent/cmd  [no test files]\\n\\nContinue with generated client wiring? [y/N] "
+      "content": "\u{1B}[1;32m$\u{1B}[0m go test ./...\\n\u{1B}[32mok\u{1B}[0m  github.com/nickbuser/tmux-agent/internal/store/sqlite  0.412s\\n\u{1B}[33m?\u{1B}[0m   github.com/nickbuser/tmux-agent/cmd  [no test files]\\n\\nContinue with generated client wiring? \u{1B}[1m[y/N]\u{1B}[0m "
     }
     """
 
-    static let iOSPaneOutputJSON = """
+    static let reviewPaneOutputJSON = """
     {
-      "session_name": "remote_coding_ios",
+      "session_name": "tmux_agent__review_diff_checklist__feat_tmx_0050_diff_viewer",
       "pane_index": 0,
-      "content": "$ xcodebuild build-for-testing ...\\n** TEST BUILD SUCCEEDED **\\n\\nReady to refine project-scoped pane routing. "
+      "content": "\u{1B}[1;32m$\u{1B}[0m git diff main...HEAD --stat\\n\u{1B}[33mFeatures/Review/DiffViewer.swift\u{1B}[0m  | \u{1B}[32m+24\u{1B}[0m \u{1B}[31m-8\u{1B}[0m\\n\u{1B}[33mFeatures/Review/DiffPaneView.swift\u{1B}[0m | \u{1B}[32m+38\u{1B}[0m\\n\\nUse unified diff or split? \u{1B}[1m[defaulting to split]\u{1B}[0m "
     }
     """
 
-    // Tickets are seeded from the design fixtures
-    // (claude_design_references/.../data.jsx, TMX-0042..TMX-0070), remapped
-    // onto the existing mock features 11 / 12 / 21. The design's FEAT-018
-    // tmux-pane tickets land on feature 11 (Session stream and pane input);
-    // FEAT-019 context tickets land on feature 12 (Mobile client planning);
-    // FEAT-020 review tickets land on feature 21 (Project hierarchy
-    // prototype). One ticket is `done` so the status filter test sees all
-    // four states. service-mock-rich-seed is the eventual replacement that
-    // will rebuild fixtures one-for-one with the design.
+    // Tickets mirror data.jsx (TMX-0042..TMX-0070). Feature mapping:
+    // • feature 11 (FEAT-018 agent-pane-multiplexer): TMX-0042..0046
+    // • feature 12 (FEAT-019 feature-context-bundle): TMX-0047..0049
+    // • feature 13 (FEAT-020 review-diff-checklist): TMX-0050..0052
+    // • feature 21 (FEAT-031 structured-query-grammar, sift): TMX-0061..0063
+    // • feature 31 (FEAT-040 footnote-popovers, paper-cuts): TMX-0070
     static func seedTickets() -> (
         tickets: [Components.Schemas.Ticket],
         criteria: [Int64: [Components.Schemas.AcceptanceCriterion]],
@@ -1141,32 +1245,32 @@ private extension MockTmuxAgentRepository {
                  description: "When a session resumes, re-inject the context bundle into the agent's prompt.",
                  status: .todo, estimate: "S", branchName: "",
                  criteriaCount: 3, criteriaDone: 0, hoursAgo: 48),
-            Spec(publicID: "TMX-0050", featureID: 21, title: "Diff viewer component",
+            Spec(publicID: "TMX-0050", featureID: 13, title: "Diff viewer component",
                  description: "Side-by-side diff viewer with line-level highlighting.",
                  status: .review, estimate: "L", branchName: "feat/tmx-0050-diff-viewer",
                  criteriaCount: 6, criteriaDone: 6, hoursAgo: 3),
-            Spec(publicID: "TMX-0051", featureID: 21, title: "Acceptance checklist binding",
+            Spec(publicID: "TMX-0051", featureID: 13, title: "Acceptance checklist binding",
                  description: "Bind the acceptance checklist to the diff so reviewers can tick items as they read.",
                  status: .review, estimate: "S", branchName: "feat/tmx-0051-checklist",
                  criteriaCount: 4, criteriaDone: 4, hoursAgo: 4),
-            Spec(publicID: "TMX-0052", featureID: 21, title: "Approve / request-changes actions",
+            Spec(publicID: "TMX-0052", featureID: 13, title: "Approve / request-changes actions",
                  description: "Reviewer actions: approve, request changes, send back to doing.",
                  status: .doing, estimate: "S", branchName: "feat/tmx-0052-review-actions",
                  criteriaCount: 3, criteriaDone: 2, hoursAgo: 6),
-            Spec(publicID: "TMX-0061", featureID: 12, title: "Lex tokens + grammar",
+            Spec(publicID: "TMX-0061", featureID: 21, title: "Lex tokens + grammar",
                  description: "Lex query tokens and define the grammar for the saved-query DSL.",
-                 status: .done, estimate: "M", branchName: "feat/tmx-0061-lex",
-                 criteriaCount: 4, criteriaDone: 4, hoursAgo: 48),
-            Spec(publicID: "TMX-0062", featureID: 12, title: "Autocomplete provider",
+                 status: .doing, estimate: "M", branchName: "feat/tmx-0061-lex",
+                 criteriaCount: 4, criteriaDone: 2, hoursAgo: 48),
+            Spec(publicID: "TMX-0062", featureID: 21, title: "Autocomplete provider",
                  description: "Autocomplete suggestions for query operators and field names.",
                  status: .todo, estimate: "S", branchName: "",
                  criteriaCount: 3, criteriaDone: 0, hoursAgo: 72),
-            Spec(publicID: "TMX-0063", featureID: 12, title: "Saved-query store",
+            Spec(publicID: "TMX-0063", featureID: 21, title: "Saved-query store",
                  description: "Persist saved queries and surface them in the autocomplete history list.",
                  status: .todo, estimate: "S", branchName: "",
                  criteriaCount: 3, criteriaDone: 0, hoursAgo: 96),
-            Spec(publicID: "TMX-0070", featureID: 21, title: "Hover popover component",
-                 description: "Reusable hover popover used by the diff viewer's annotations.",
+            Spec(publicID: "TMX-0070", featureID: 31, title: "Hover popover component",
+                 description: "Reusable hover popover used by footnote link previews.",
                  status: .todo, estimate: "S", branchName: "",
                  criteriaCount: 2, criteriaDone: 0, hoursAgo: 144)
         ]
@@ -1215,7 +1319,7 @@ private extension MockTmuxAgentRepository {
             ticketID += 1
         }
 
-        // Highest seeded TMX is 0070; next created ticket starts at 0071.
+        // Highest seeded public ID is TMX-0070; next created ticket starts at 0071.
         return (tickets, criteria, ticketID, criterionID, 71)
     }
 
@@ -1288,25 +1392,32 @@ private extension MockTmuxAgentRepository {
         """
 
         let specs: [Spec] = [
-            // Feature 11 — Session stream and pane input
-            Spec(featureID: 11, kind: .vision, title: "Session stream vision",
+            // Feature 11 — Agent pane multiplexer (FEAT-018)
+            Spec(featureID: 11, kind: .vision, title: "Pane multiplexer vision",
                  bodyBlocks: visionBlocks, pinned: true, hoursAgo: 0.5),
-            Spec(featureID: 11, kind: .prd, title: "Session stream PRD",
+            Spec(featureID: 11, kind: .prd, title: "Pane multiplexer PRD",
                  bodyBlocks: prdBlocks, pinned: false, hoursAgo: 6),
             Spec(featureID: 11, kind: .notes, title: "Implementation notes",
                  bodyBlocks: notesBlocks, pinned: false, hoursAgo: 24),
-            // Feature 12 — Mobile client planning
-            Spec(featureID: 12, kind: .prd, title: "Mobile parity PRD",
+            // Feature 12 — Feature context bundle (FEAT-019)
+            Spec(featureID: 12, kind: .prd, title: "Context bundle PRD",
                  bodyBlocks: prdBlocks, pinned: true, hoursAgo: 1),
-            Spec(featureID: 12, kind: .design, title: "Drill-down layout",
+            Spec(featureID: 12, kind: .design, title: "Context schema design",
                  bodyBlocks: designBlocks, pinned: false, hoursAgo: 48),
             Spec(featureID: 12, kind: .log, title: "Build log",
                  bodyBlocks: logBlocks, pinned: false, hoursAgo: 12),
-            // Feature 21 — Project hierarchy prototype
-            Spec(featureID: 21, kind: .vision, title: "Hierarchy vision",
+            // Feature 13 — Review diff + checklist (FEAT-020)
+            Spec(featureID: 13, kind: .vision, title: "Review surface vision",
                  bodyBlocks: visionBlocks, pinned: false, hoursAgo: 4),
-            Spec(featureID: 21, kind: .custom, title: "Prompt buildout",
-                 bodyBlocks: customBlocks, pinned: true, hoursAgo: 2)
+            Spec(featureID: 13, kind: .custom, title: "Eng design v2",
+                 bodyBlocks: customBlocks, pinned: true, hoursAgo: 2),
+            Spec(featureID: 13, kind: .notes, title: "Review UX notes",
+                 bodyBlocks: notesBlocks, pinned: false, hoursAgo: 20),
+            // Feature 21 — Structured query grammar (FEAT-031, sift)
+            Spec(featureID: 21, kind: .prd, title: "Query grammar PRD",
+                 bodyBlocks: prdBlocks, pinned: true, hoursAgo: 3),
+            Spec(featureID: 21, kind: .notes, title: "Parser notes",
+                 bodyBlocks: notesBlocks, pinned: false, hoursAgo: 36)
         ]
 
         var docs: [Components.Schemas.Doc] = []
@@ -1350,7 +1461,7 @@ private extension MockTmuxAgentRepository {
             let hoursAgo: Double
         }
         let specs: [Spec] = [
-            // Feature 11 — Session stream and pane input
+            // Feature 11 — Agent pane multiplexer (FEAT-018)
             Spec(featureID: 11,
                  title: "Use one WebSocket per pane",
                  body: "Multiplexing all panes onto a single socket complicates resize + reconnect. One stream per pane keeps ownership clear.",
@@ -1363,7 +1474,7 @@ private extension MockTmuxAgentRepository {
                  title: "Empty-Enter is a first-class action",
                  body: "Users send literal Enter often enough (REPL prompts, prompts waiting on confirmation) that we expose it explicitly.",
                  actor: .human, actorName: "Nick", hoursAgo: 96),
-            // Feature 12 — Mobile client planning
+            // Feature 12 — Feature context bundle (FEAT-019)
             Spec(featureID: 12,
                  title: "Terminal is a drill-down, not a tab",
                  body: "Five tabs; the terminal lives under Sessions / Inbox / Feature Sessions sub-tab. Tab bar hides while the terminal is presented.",
@@ -1372,15 +1483,24 @@ private extension MockTmuxAgentRepository {
                  title: "Default tab is Inbox",
                  body: "Inbox surfaces the agent's needs-you queue; users open the app to triage, not to browse projects.",
                  actor: .human, actorName: "Nick", hoursAgo: 30),
-            // Feature 21 — Project hierarchy prototype
-            Spec(featureID: 21,
+            // Feature 13 — Review diff + checklist (FEAT-020)
+            Spec(featureID: 13,
                  title: "Don't conflate AgentSession with raw tmux Session",
                  body: "AgentSession is the persistent record (state, transcript_key, cost). Raw Session/Pane stay for the WebSocket transport.",
                  actor: .agent, actorName: "Codex", hoursAgo: 8),
-            Spec(featureID: 21,
+            Spec(featureID: 13,
                  title: "OpenAPI is the single source of truth",
                  body: "Mobile + web both consume generated types. Hand-rolled DTOs that duplicate the contract get deleted on sight.",
-                 actor: .human, actorName: "Nick", hoursAgo: 72)
+                 actor: .human, actorName: "Nick", hoursAgo: 72),
+            // Feature 21 — Structured query grammar (FEAT-031, sift)
+            Spec(featureID: 21,
+                 title: "Use PEG parser, not hand-rolled",
+                 body: "PEG gives us a declarative grammar that's easy to extend for new filter operators without rewriting the tokenizer.",
+                 actor: .agent, actorName: "Codex", hoursAgo: 36),
+            Spec(featureID: 21,
+                 title: "Autocomplete reads the index schema, not a static list",
+                 body: "The field list changes as users add log sources; dynamic schema introspection keeps completions accurate.",
+                 actor: .human, actorName: "Nick", hoursAgo: 60)
         ]
 
         var decisions: [Components.Schemas.Decision] = []
@@ -1404,8 +1524,8 @@ private extension MockTmuxAgentRepository {
     }
 
     // Seeds the 10 fixture activity events from the design's data.jsx.
-    // Mapping FEAT-018 → feature 11 (project 1), FEAT-019 → feature 12
-    // (project 1), FEAT-020 → feature 21 (project 2). Ticket numeric ids
+    // Feature mapping: FEAT-018 → feature 11 (project 1), FEAT-019 → feature 12
+    // (project 1), FEAT-020 → feature 13 (project 1). Ticket numeric ids
     // mirror seedTickets — TMX-0042 = 200, TMX-0043 = 201, TMX-0044 =
     // 202, TMX-0050 = 208, TMX-0051 = 209.
     static func seedActivityEvents() -> (events: [Components.Schemas.ActivityEvent], nextID: Int64) {
@@ -1427,30 +1547,30 @@ private extension MockTmuxAgentRepository {
             Spec(actor: .agent, actorName: "session-04", verb: "updated checklist",
                  kind: .check, detail: "2/4 acceptance criteria met",
                  projectID: 1, featureID: 11, ticketID: 200, minutesAgo: 14),
-            Spec(actor: .agent, actorName: "session-07", verb: "opened review",
-                 kind: .review, detail: "+412 / −37 across 9 files",
-                 projectID: 2, featureID: 21, ticketID: 208, minutesAgo: 32),
-            Spec(actor: .human, actorName: "you", verb: "edited PRD",
-                 kind: .doc, detail: "“Resume hook re-injects last 200 lines”",
+            Spec(actor: .agent, actorName: “session-07”, verb: “opened review”,
+                 kind: .review, detail: “+412 / −37 across 9 files”,
+                 projectID: 1, featureID: 13, ticketID: 208, minutesAgo: 32),
+            Spec(actor: .human, actorName: “you”, verb: “edited PRD”,
+                 kind: .doc, detail: “”Resume hook re-injects last 200 lines””,
                  projectID: 1, featureID: 12, ticketID: nil, minutesAgo: 60),
-            Spec(actor: .agent, actorName: "session-05", verb: "logged decision",
-                 kind: .decision, detail: "use slug+sha as bundle key, not branch",
+            Spec(actor: .agent, actorName: “session-05”, verb: “logged decision”,
+                 kind: .decision, detail: “use slug+sha as bundle key, not branch”,
                  projectID: 1, featureID: 12, ticketID: nil, minutesAgo: 65),
-            Spec(actor: .agent, actorName: "session-07", verb: "requested input",
-                 kind: .question, detail: "“Use unified diff or split? defaulting to split.”",
-                 projectID: 2, featureID: 21, ticketID: 208, minutesAgo: 120),
-            Spec(actor: .agent, actorName: "session-04", verb: "ran tests",
-                 kind: .test, detail: "go test ./... — 142 passed, 0 failed",
+            Spec(actor: .agent, actorName: “session-07”, verb: “requested input”,
+                 kind: .question, detail: “”Use unified diff or split? defaulting to split.””,
+                 projectID: 1, featureID: 13, ticketID: 208, minutesAgo: 120),
+            Spec(actor: .agent, actorName: “session-04”, verb: “ran tests”,
+                 kind: .test, detail: “go test ./... — 142 passed, 0 failed”,
                  projectID: 1, featureID: 11, ticketID: 201, minutesAgo: 180),
-            Spec(actor: .human, actorName: "you", verb: "approved",
-                 kind: .approve, detail: "merged into FEAT-018",
+            Spec(actor: .human, actorName: “you”, verb: “approved”,
+                 kind: .approve, detail: “merged into FEAT-018”,
                  projectID: 1, featureID: 11, ticketID: 202, minutesAgo: 240),
-            Spec(actor: .agent, actorName: "session-05", verb: "drafted spec",
-                 kind: .doc, detail: "Eng design v2 — 8 sections, 1.4k words",
+            Spec(actor: .agent, actorName: “session-05”, verb: “drafted spec”,
+                 kind: .doc, detail: “Eng design v2 — 8 sections, 1.4k words”,
                  projectID: 1, featureID: 12, ticketID: nil, minutesAgo: 300),
-            Spec(actor: .agent, actorName: "session-07", verb: "rebased",
-                 kind: .commit, detail: "on FEAT-020 head, no conflicts",
-                 projectID: 2, featureID: 21, ticketID: 209, minutesAgo: 360)
+            Spec(actor: .agent, actorName: “session-07”, verb: “rebased”,
+                 kind: .commit, detail: “on FEAT-020 head, no conflicts”,
+                 projectID: 1, featureID: 13, ticketID: 209, minutesAgo: 360)
         ]
 
         var events: [Components.Schemas.ActivityEvent] = []
@@ -1494,19 +1614,19 @@ private extension MockTmuxAgentRepository {
         }
         let specs: [Spec] = [
             // session-04 → TMX-0042 (ticket id 200), idle, 2h 14m uptime
-            Spec(ticketID: 200, tmuxSession: "tmux_server_coding_app__session_stream_and_pane_input__feat_tmx_0042_pane_registry",
+            Spec(ticketID: 200, tmuxSession: "tmux_agent__agent_pane_multiplexer__feat_tmx_0042_pane_registry",
                  state: .idle, pane: "agent:0.0", cpu: 2,
                  startMinutesAgo: 134, lastActiveMinutesAgo: 6),
             // session-05 → TMX-0047 (ticket id 205), awaiting-input, 4h 02m
-            Spec(ticketID: 205, tmuxSession: "tmux_server_coding_app__mobile_client_planning__feat_tmx_0047_context_bundle",
+            Spec(ticketID: 205, tmuxSession: "tmux_agent__feature_context_bundle__feat_tmx_0047_context_bundle",
                  state: .awaitingInput, pane: "agent:1.0", cpu: 0,
                  startMinutesAgo: 242, lastActiveMinutesAgo: 12),
             // session-07 → TMX-0050 (ticket id 208), active, 47m
-            Spec(ticketID: 208, tmuxSession: "remote_coding_ios__project_hierarchy_prototype__feat_tmx_0050_diff_viewer",
+            Spec(ticketID: 208, tmuxSession: "tmux_agent__review_diff_checklist__feat_tmx_0050_diff_viewer",
                  state: .active, pane: "agent:2.0", cpu: 31,
                  startMinutesAgo: 47, lastActiveMinutesAgo: 1),
             // session-08 → TMX-0048 (ticket id 206), active, 22m
-            Spec(ticketID: 206, tmuxSession: "tmux_server_coding_app__mobile_client_planning__feat_tmx_0048_prd_resolver",
+            Spec(ticketID: 206, tmuxSession: "tmux_agent__feature_context_bundle__feat_tmx_0048_prd_resolver",
                  state: .active, pane: "agent:1.1", cpu: 18,
                  startMinutesAgo: 22, lastActiveMinutesAgo: 1)
         ]
@@ -1590,7 +1710,7 @@ private extension MockTmuxAgentRepository {
             branch: "feat/tmx-0050-diff-viewer",
             files: [
                 Components.Schemas.FileDiff(
-                    path: "remote-coding/Features/Review/DiffViewer.swift",
+                    path: "tmux-agent/Features/Review/DiffViewer.swift",
                     oldPath: nil,
                     change: .modified,
                     binary: false,
@@ -1598,7 +1718,7 @@ private extension MockTmuxAgentRepository {
                     newContent: modifiedNew
                 ),
                 Components.Schemas.FileDiff(
-                    path: "remote-coding/Features/Review/DiffPaneView.swift",
+                    path: "tmux-agent/Features/Review/DiffPaneView.swift",
                     oldPath: nil,
                     change: .added,
                     binary: false,

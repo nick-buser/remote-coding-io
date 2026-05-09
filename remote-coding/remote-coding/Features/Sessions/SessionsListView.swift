@@ -89,7 +89,7 @@ struct SessionsListView: View {
                 EmptyState(
                     systemImage: "checkmark.circle",
                     title: "All clear",
-                    message: "No sessions are waiting on you right now."
+                    message: "Agents are working."
                 )
             } else if !awaiting.isEmpty {
                 VStack(spacing: Theme.Spacing.s3) {

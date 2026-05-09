@@ -1,8 +1,8 @@
 ---
 prefix: service
 title: Polish empty states across screens
-status: todo
-branch:
+status: done
+branch: service-0036
 ---
 
 ## Description
