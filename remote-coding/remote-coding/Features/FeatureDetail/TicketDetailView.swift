@@ -50,6 +50,24 @@ struct TicketDetailView: View {
         .sheet(isPresented: $showStatusPicker) {
             statusPickerSheet
         }
+        .sheet(isPresented: $showSpawnSheet) {
+            if let feature = viewModel.feature, let project = viewModel.project {
+                SpawnSheet(viewModel: makeSpawnVM(feature: feature, project: project))
+            }
+        }
+    }
+
+    private func makeSpawnVM(
+        feature: Components.Schemas.Feature,
+        project: Components.Schemas.Project
+    ) -> SpawnSheetViewModel {
+        let vm = SpawnSheetViewModel(
+            entry: .feature(feature, project),
+            repository: appModel.repository,
+            coordinator: coordinator
+        )
+        vm.preselectedTicket = viewModel.ticket
+        return vm
     }
 
     // MARK: - Top bar
@@ -270,6 +288,7 @@ struct TicketDetailView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .buttonStyle(.plain)
+                    .disabled(viewModel.feature == nil || viewModel.project == nil)
                     .padding(.top, 12)
                 }
             }
