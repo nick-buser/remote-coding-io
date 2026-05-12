@@ -54,14 +54,13 @@ struct FeatureDetailView: View {
             }
         }
         .sheet(isPresented: $showSpawnSessionSheet) {
-            SpawnSessionSheet(
-                feature: viewModel.feature,
-                tickets: viewModel.tickets,
-                accent: viewModel.accentColor
-            ) { created in
-                viewModel.agentSessions.insert(created, at: 0)
-                coordinator.push(.agentSession(sessionID: created.id))
-            }
+            SpawnSheet(
+                viewModel: SpawnSheetViewModel(
+                    entry: .feature(viewModel.feature, viewModel.project),
+                    repository: appModel.repository,
+                    coordinator: coordinator
+                )
+            )
         }
         .sheet(isPresented: $showEditFeatureSheet) {
             CreateFeatureSheet(
@@ -219,7 +218,6 @@ struct FeatureDetailView: View {
             PillButton(title: "Spawn session", role: .secondary, accent: viewModel.accentColor, wide: true) {
                 showSpawnSessionSheet = true
             }
-            .disabled(viewModel.tickets.isEmpty)
         }
         .padding(.horizontal, Theme.Spacing.s4)
         .padding(.top, Theme.Spacing.s2)

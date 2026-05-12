@@ -34,12 +34,13 @@ struct SessionsListView: View {
             )
         }
         .sheet(isPresented: $showSpawnSheet) {
-            EmptyState(
-                systemImage: "plus.circle",
-                title: "Spawn session",
-                message: "The pickers (project → feature → ticket) ship in a follow-up to service-feature-sessions-tab."
+            SpawnSheet(
+                viewModel: SpawnSheetViewModel(
+                    entry: .sessionsTab,
+                    repository: appModel.repository,
+                    coordinator: coordinator
+                )
             )
-            .presentationDetents([.medium])
         }
     }
 
