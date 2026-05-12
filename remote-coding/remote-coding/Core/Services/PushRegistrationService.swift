@@ -78,6 +78,30 @@ final class PushRegistrationService {
         }
     }
 
+    /// Reads the current system authorization status without prompting and
+    /// reconciles `status`. Used by the You screen on appear so the toggle
+    /// reflects reality (the user may have flipped permission in iOS
+    /// Settings while the app was backgrounded).
+    func refreshStatus() async {
+        let current = await pushSystem.authorizationStatus()
+        switch current {
+        case .denied:
+            status = .denied
+        case .notDetermined:
+            // Preserve `.registered` if we already have a token (rare, but the
+            // system can briefly report `.notDetermined` while permissions are
+            // being reset). Otherwise fall back.
+            if case .registered = status { return }
+            status = .notDetermined
+        case .authorized, .provisional, .ephemeral:
+            if let token = preferences.pushToken {
+                status = .registered(token: token)
+            } else {
+                status = .unknown
+            }
+        }
+    }
+
     /// Called by `AppDelegate.didRegisterForRemoteNotificationsWithDeviceToken`.
     /// Hex-encodes the raw token, persists it, and POSTs the registration
     /// body (with current mute list + quiet hours) to the backend.
@@ -128,6 +152,33 @@ final class PushRegistrationService {
         } catch {
             logger.error("re-registerDevice failed: \(error.localizedDescription, privacy: .public)")
             lastError = error
+        }
+    }
+
+    /// Mutates the mute list and re-registers in one call. Used by the
+    /// settings sheet so the server immediately sees the new filter.
+    func setMutedProjectIDs(_ ids: [Int64]) async {
+        preferences.mutedProjectIDs = ids
+        await reregister()
+    }
+
+    /// Mutates quiet hours and re-registers. Both `start` and `end` must be
+    /// provided to enable the window; passing `nil` for either clears the
+    /// window entirely.
+    func setQuietHours(start: Int?, end: Int?) async {
+        preferences.quietHoursStart = start
+        preferences.quietHoursEnd = end
+        await reregister()
+    }
+
+    /// Drives the master toggle on the settings screen. Setting `true`
+    /// triggers the permission flow (no-op if already granted); setting
+    /// `false` deregisters.
+    func setMasterToggle(_ enabled: Bool) async {
+        if enabled {
+            await requestPermissionIfNeeded()
+        } else {
+            await deregister()
         }
     }
 
