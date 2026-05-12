@@ -227,8 +227,16 @@ private struct TabPlaceholder: View {
 }
 
 #Preview {
-    ContentView()
-        .environment(AppModel(repository: MockTmuxAgentRepository()))
+    let appModel = AppModel(repository: MockTmuxAgentRepository())
+    let preferences = UserPreferences(store: UserDefaults(suiteName: "preview-content") ?? .standard)
+    let pushService = PushRegistrationService(
+        repositoryProvider: { appModel.repository },
+        preferences: preferences,
+        pushSystem: MockPushSystem(initialStatus: .denied)
+    )
+    return ContentView()
+        .environment(appModel)
         .environment(RootCoordinator())
-        .environment(UserPreferences(store: UserDefaults(suiteName: "preview-content") ?? .standard))
+        .environment(preferences)
+        .environment(pushService)
 }

@@ -1,12 +1,17 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
-/// You tab body — profile card + Workspace / Appearance / Agent
-/// settings groups. The tmux server row pushes the existing
+/// You tab body — profile card + Workspace / Notifications / Appearance /
+/// Agent settings groups. The tmux server row pushes the existing
 /// `SettingsView` (the API base URL form from Phase 1).
 struct YouView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(UserPreferences.self) private var prefs
+    @Environment(PushRegistrationService.self) private var pushService
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.openURL) private var openURL
 
     @State private var liveProjectCount: Int?
     @State private var liveSessionCount: Int?
@@ -14,6 +19,8 @@ struct YouView: View {
     @State private var showProjectPicker = false
     @State private var showComingSoonSheet: ComingSoonContent?
     @State private var signOutToast = false
+    @State private var showMutedProjectsSheet = false
+    @State private var showQuietHoursSheet = false
 
     var body: some View {
         ScrollView {
@@ -21,6 +28,7 @@ struct YouView: View {
                 header
                 profileCard
                 workspaceSection
+                notificationsSection
                 appearanceSection
                 agentSection
             }
@@ -30,9 +38,17 @@ struct YouView: View {
         .toolbar(.hidden, for: .navigationBar)
         .task {
             await loadWorkspaceSummary()
+            await pushService.refreshStatus()
         }
         .refreshable {
             await loadWorkspaceSummary()
+            await pushService.refreshStatus()
+        }
+        .sheet(isPresented: $showMutedProjectsSheet) {
+            mutedProjectsSheet
+        }
+        .sheet(isPresented: $showQuietHoursSheet) {
+            quietHoursSheet
         }
         .sheet(item: $showComingSoonSheet) { content in
             EmptyState(systemImage: content.icon, title: content.title, message: content.message)
@@ -110,8 +126,6 @@ struct YouView: View {
                 showProjectPicker = true
             }
             Divider().background(Theme.Surface.sep(scheme))
-            settingRow(title: "Notifications", detail: "Reviews & questions", chevron: false) {}
-            Divider().background(Theme.Surface.sep(scheme))
             NavigationLink(value: YouRoute.tmuxServer) {
                 settingRow(title: "tmux server", detail: appModel.apiConfiguration.baseURL.host ?? "Unset", chevron: true)
             }
@@ -120,6 +134,89 @@ struct YouView: View {
         .sheet(isPresented: $showProjectPicker) {
             projectPickerSheet
         }
+    }
+
+    private var notificationsSection: some View {
+        section(title: "Notifications") {
+            masterToggleRow
+            if isPushActive {
+                Divider().background(Theme.Surface.sep(scheme))
+                settingRow(title: "Muted projects", detail: mutedProjectsLabel) {
+                    showMutedProjectsSheet = true
+                }
+                Divider().background(Theme.Surface.sep(scheme))
+                settingRow(title: "Quiet hours", detail: quietHoursLabel) {
+                    showQuietHoursSheet = true
+                }
+            }
+            if isPushDenied {
+                Divider().background(Theme.Surface.sep(scheme))
+                Button {
+                    #if canImport(UIKit)
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        openURL(url)
+                    }
+                    #endif
+                } label: {
+                    HStack(spacing: 8) {
+                        Text("Enable in Settings")
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundStyle(prefs.accent.value(for: scheme))
+                        Spacer(minLength: 8)
+                        Chevron()
+                    }
+                    .padding(.vertical, 10)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var masterToggleRow: some View {
+        HStack(spacing: 8) {
+            Text("Push notifications")
+                .font(.system(size: 14, weight: .regular))
+                .foregroundStyle(Theme.Text.fg(scheme))
+            Spacer(minLength: 8)
+            Toggle("", isOn: Binding(
+                get: { isPushActive },
+                set: { newValue in
+                    Task { await pushService.setMasterToggle(newValue) }
+                }
+            ))
+            .labelsHidden()
+            .disabled(isPushDenied)
+            .tint(prefs.accent.value(for: scheme))
+        }
+        .padding(.vertical, 10)
+    }
+
+    private var isPushActive: Bool {
+        if case .registered = pushService.status { return true }
+        return false
+    }
+
+    private var isPushDenied: Bool {
+        pushService.status == .denied
+    }
+
+    private var mutedProjectsLabel: String {
+        let count = prefs.mutedProjectIDs.count
+        if count == 0 { return "None" }
+        if count == 1 { return "1 project" }
+        return "\(count) projects"
+    }
+
+    private var quietHoursLabel: String {
+        guard let start = prefs.quietHoursStart, let end = prefs.quietHoursEnd else {
+            return "Off"
+        }
+        return "\(Self.formatUTCHour(start)) → \(Self.formatUTCHour(end)) UTC"
+    }
+
+    static func formatUTCHour(_ hour: Int) -> String {
+        String(format: "%02d:00", hour)
     }
 
     private var appearanceSection: some View {
@@ -300,6 +397,68 @@ struct YouView: View {
         return project.name
     }
 
+    // MARK: - Muted projects sheet
+
+    private var mutedProjectsSheet: some View {
+        NavigationStack {
+            List {
+                if availableProjects.isEmpty {
+                    Text("No projects loaded yet.")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(availableProjects, id: \.id) { project in
+                    Button {
+                        toggleMute(for: project.id)
+                    } label: {
+                        HStack {
+                            Pip(accent: ProjectAccentMapper.color(for: project.accent ?? ""), size: 8, radius: 2)
+                            Text(project.name)
+                            Spacer()
+                            if prefs.mutedProjectIDs.contains(project.id) {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Muted projects")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { showMutedProjectsSheet = false }
+                }
+            }
+        }
+    }
+
+    private func toggleMute(for projectID: Int64) {
+        var ids = prefs.mutedProjectIDs
+        if let index = ids.firstIndex(of: projectID) {
+            ids.remove(at: index)
+        } else {
+            ids.append(projectID)
+        }
+        Task { await pushService.setMutedProjectIDs(ids.sorted()) }
+    }
+
+    // MARK: - Quiet hours sheet
+
+    private var quietHoursSheet: some View {
+        NavigationStack {
+            QuietHoursForm(
+                initialStart: prefs.quietHoursStart,
+                initialEnd: prefs.quietHoursEnd
+            ) { start, end in
+                Task { await pushService.setQuietHours(start: start, end: end) }
+                showQuietHoursSheet = false
+            } onCancel: {
+                showQuietHoursSheet = false
+            }
+            .navigationTitle("Quiet hours")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
     // MARK: - Load
 
     private func loadWorkspaceSummary() async {
@@ -316,6 +475,91 @@ struct YouView: View {
         } catch {
             // Soft fail — the summary line just shows defaults.
         }
+    }
+}
+
+// MARK: - Quiet hours form
+
+/// Time pickers for start + end of the quiet-hours window. The user picks
+/// in their local timezone for legibility; we convert to UTC hours (the
+/// shape stored in `UserPreferences` and sent to the backend) on commit.
+private struct QuietHoursForm: View {
+    @Environment(\.colorScheme) private var scheme
+
+    let initialStart: Int?
+    let initialEnd: Int?
+    let onSave: (Int?, Int?) -> Void
+    let onCancel: () -> Void
+
+    @State private var isEnabled: Bool
+    @State private var startDate: Date
+    @State private var endDate: Date
+
+    init(
+        initialStart: Int?,
+        initialEnd: Int?,
+        onSave: @escaping (Int?, Int?) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        self.initialStart = initialStart
+        self.initialEnd = initialEnd
+        self.onSave = onSave
+        self.onCancel = onCancel
+        let enabled = initialStart != nil && initialEnd != nil
+        _isEnabled = State(initialValue: enabled)
+        _startDate = State(initialValue: Self.dateForUTCHour(initialStart ?? 22))
+        _endDate = State(initialValue: Self.dateForUTCHour(initialEnd ?? 7))
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Enable quiet hours", isOn: $isEnabled)
+            } footer: {
+                Text("Pushes are suppressed during this window. Times are stored as UTC hours; pickers show your local timezone for display.")
+                    .font(.footnote)
+            }
+            if isEnabled {
+                Section("Start") {
+                    DatePicker("Start", selection: $startDate, displayedComponents: .hourAndMinute)
+                        .datePickerStyle(.wheel)
+                        .labelsHidden()
+                }
+                Section("End") {
+                    DatePicker("End", selection: $endDate, displayedComponents: .hourAndMinute)
+                        .datePickerStyle(.wheel)
+                        .labelsHidden()
+                }
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel", action: onCancel)
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Save") {
+                    if isEnabled {
+                        onSave(Self.utcHour(from: startDate), Self.utcHour(from: endDate))
+                    } else {
+                        onSave(nil, nil)
+                    }
+                }
+            }
+        }
+    }
+
+    private static func dateForUTCHour(_ hour: Int) -> Date {
+        var components = DateComponents()
+        components.hour = hour
+        components.minute = 0
+        components.timeZone = TimeZone(identifier: "UTC")
+        return Calendar(identifier: .gregorian).date(from: components) ?? Date()
+    }
+
+    private static func utcHour(from date: Date) -> Int {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC") ?? .gmt
+        return calendar.component(.hour, from: date)
     }
 }
 
@@ -353,21 +597,40 @@ private struct ComingSoonContent: Identifiable {
     )
 }
 
+@MainActor
+private func makeYouPreviewService(
+    suite: String,
+    pushStatus: PushAuthorizationStatus = .denied
+) -> (AppModel, UserPreferences, PushRegistrationService) {
+    let model = AppModel(repository: MockTmuxAgentRepository())
+    let prefs = UserPreferences(store: UserDefaults(suiteName: suite) ?? .standard)
+    let service = PushRegistrationService(
+        repositoryProvider: { model.repository },
+        preferences: prefs,
+        pushSystem: MockPushSystem(initialStatus: pushStatus)
+    )
+    return (model, prefs, service)
+}
+
 #Preview("You — light") {
-    NavigationStack {
+    let (model, prefs, push) = makeYouPreviewService(suite: "preview-light")
+    return NavigationStack {
         YouView()
     }
-    .environment(AppModel(repository: MockTmuxAgentRepository()))
+    .environment(model)
     .environment(RootCoordinator())
-    .environment(UserPreferences(store: UserDefaults(suiteName: "preview-light") ?? .standard))
+    .environment(prefs)
+    .environment(push)
 }
 
 #Preview("You — dark") {
-    NavigationStack {
+    let (model, prefs, push) = makeYouPreviewService(suite: "preview-dark")
+    return NavigationStack {
         YouView()
     }
-    .environment(AppModel(repository: MockTmuxAgentRepository()))
+    .environment(model)
     .environment(RootCoordinator())
-    .environment(UserPreferences(store: UserDefaults(suiteName: "preview-dark") ?? .standard))
+    .environment(prefs)
+    .environment(push)
     .preferredColorScheme(.dark)
 }
