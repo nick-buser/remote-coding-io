@@ -15,6 +15,7 @@ struct ProjectDetailView: View {
     @State private var viewModel: ProjectDetailViewModel
     @State private var section: String = ProjectDetailSection.features.rawValue
     @State private var showEditSheet = false
+    @State private var showSearchSheet = false
     @State private var showCreateFeatureSheet = false
     @State private var showSpawnSheet = false
     @State private var showDeleteConfirm = false
@@ -44,6 +45,9 @@ struct ProjectDetailView: View {
         }
         .refreshable {
             await viewModel.load(repository: appModel.repository)
+        }
+        .sheet(isPresented: $showSearchSheet) {
+            SearchView(scopeProject: viewModel.project, viewModel: appModel.searchViewModel)
         }
         .sheet(isPresented: $showEditSheet) {
             CreateProjectSheet(existing: viewModel.project) { updated in
@@ -98,7 +102,7 @@ struct ProjectDetailView: View {
             BackChevron(label: "Projects", accent: nil) { dismiss() }
         } trailing: {
             HStack(spacing: 8) {
-                NavIconButton(name: .search) { /* search placeholder */ }
+                NavIconButton(name: .search) { showSearchSheet = true }
                 Menu {
                     Button {
                         showEditSheet = true

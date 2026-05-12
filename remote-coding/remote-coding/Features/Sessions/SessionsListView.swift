@@ -9,6 +9,7 @@ struct SessionsListView: View {
 
     @State private var viewModel = SessionsListViewModel()
     @State private var showSpawnSheet = false
+    @State private var showSearchSheet = false
 
     var body: some View {
         ScrollView {
@@ -42,14 +43,22 @@ struct SessionsListView: View {
                 )
             )
         }
+        .sheet(isPresented: $showSearchSheet) {
+            SearchView(viewModel: appModel.searchViewModel)
+        }
     }
 
     // MARK: - Header
 
     private var header: some View {
         LargeTitleHeader(title: "Sessions", subtitle: viewModel.subtitle()) {
-            NavIconButton(name: .plus, accent: appModel.accent, tinted: true) {
-                showSpawnSheet = true
+            HStack(spacing: 8) {
+                NavIconButton(name: .search) {
+                    showSearchSheet = true
+                }
+                NavIconButton(name: .plus, accent: appModel.accent, tinted: true) {
+                    showSpawnSheet = true
+                }
             }
         }
     }

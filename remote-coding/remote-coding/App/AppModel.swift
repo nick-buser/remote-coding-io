@@ -35,6 +35,8 @@ final class AppModel {
     /// can read it from any view.
     var accent: AccentColor = .iris
 
+    let searchViewModel = SearchViewModel()
+
     init(apiConfiguration: APIConfiguration = APIConfigurationStore.load()) {
         self.apiConfiguration = apiConfiguration
         let repository = LiveTmuxAgentRepository(configuration: apiConfiguration)
