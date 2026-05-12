@@ -96,7 +96,7 @@ struct TicketReviewView: View {
     private var metaLine: some View {
         let stats = viewModel.diffStats
         let parts: [String] = [
-            viewModel.diff?.branch.map { "branch \($0)" } ?? nil,
+            viewModel.diff.map { "branch \($0.branch)" },
             stats.fileCount > 0 ? "+\(stats.adds) / −\(stats.dels) · \(stats.fileCount) file\(stats.fileCount == 1 ? "" : "s")" : nil
         ].compactMap { $0 }
         return Text(parts.joined(separator: " · "))

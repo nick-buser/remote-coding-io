@@ -1,4 +1,5 @@
 import SwiftUI
+import Runestone
 
 struct TerminalView: View {
     let sessionID: Int64
@@ -234,11 +235,13 @@ final class RunestoneScrollContainer: UIView {
         textView.isEditable = false
         textView.isScrollEnabled = true
         textView.backgroundColor = UIColor(Theme.Surface.terminalBg)
-        textView.font = UIFont.monospacedSystemFont(ofSize: 13, weight: .regular)
-        textView.textColor = UIColor(Theme.Text.fg(.dark))
-        textView.contentInset = UIEdgeInsets(top: 14, left: 14, bottom: 14, right: 14)
+        textView.theme = RunestoneSurfaceTheme(
+            font: .monospacedSystemFont(ofSize: 13, weight: .regular),
+            textColor: UIColor(Theme.Text.fg(.dark))
+        )
+        textView.textContainerInset = UIEdgeInsets(top: 14, left: 14, bottom: 14, right: 14)
         textView.showLineNumbers = false
-        textView.lineWrappingEnabled = false
+        textView.isLineWrappingEnabled = false
         textView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(textView)
         NSLayoutConstraint.activate([

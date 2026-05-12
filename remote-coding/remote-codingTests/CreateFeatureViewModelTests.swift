@@ -44,6 +44,7 @@ struct CreateFeatureViewModelTests {
         #expect(vm.branchName == "feat/different-title")
     }
 
+    @MainActor
     @Test func deriveSlugStripsAndCollapses() async {
         #expect(CreateFeatureViewModel.deriveSlug(from: "Inbox  Composer!!") == "inbox-composer")
         #expect(CreateFeatureViewModel.deriveSlug(from: "") == "")
@@ -65,6 +66,7 @@ struct CreateFeatureViewModelTests {
 
     // MARK: - Field error mapping
 
+    @MainActor
     @Test func fieldErrorMapperHandlesContractAndCamelPaths() async {
         #expect(CreateFeatureViewModel.fieldErrorMapper(rawField: "title") == .title)
         #expect(CreateFeatureViewModel.fieldErrorMapper(rawField: "branch_name") == .branchName)

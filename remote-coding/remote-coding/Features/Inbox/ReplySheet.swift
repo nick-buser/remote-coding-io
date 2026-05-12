@@ -14,7 +14,7 @@ struct ReplySheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
 
-    @State private var body: String = ""
+    @State private var bodyText: String = ""
     @State private var isSending = false
     @State private var errorMessage: String?
 
@@ -27,7 +27,7 @@ struct ReplySheet: View {
                     .padding(.horizontal, Theme.Spacing.s4)
                     .padding(.top, Theme.Spacing.s4)
 
-                TextEditor(text: $body)
+                TextEditor(text: $bodyText)
                     .font(.system(size: 15, weight: .regular, design: .monospaced))
                     .padding(.horizontal, Theme.Spacing.s4)
                     .frame(minHeight: 120)
@@ -58,14 +58,14 @@ struct ReplySheet: View {
                             Text("Send")
                         }
                     }
-                    .disabled(body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSending)
+                    .disabled(bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSending)
                 }
             }
         }
     }
 
     private func send() async {
-        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isSending else { return }
         isSending = true
         defer { isSending = false }

@@ -226,8 +226,8 @@ struct FeatureTicketRow: View {
 
     private var trailingStack: some View {
         VStack(alignment: .trailing, spacing: 4) {
-            if let estimate = ticket.estimate, !estimate.isEmpty {
-                Text(estimate)
+            if !ticket.estimate.isEmpty {
+                Text(ticket.estimate)
                     .themeMonoSm()
                     .foregroundStyle(Theme.Text.fg(scheme))
                     .padding(.horizontal, 6)

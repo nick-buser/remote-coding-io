@@ -798,15 +798,12 @@ struct remote_codingTests {
     @MainActor
     @Test func terminalSupportsEmptyEnterAndControlKeys() async throws {
         let repository = MockTmuxAgentRepository()
-        let project = try await repository.getProject(idOrSlug: "tmux-server-coding-app")
-        let session = try await repository.listSessions().first!
-        let pane = try await repository.listPanes(sessionName: session.name).first!
-        let context = TerminalContext(project: project, feature: nil, session: session, pane: pane)
+        let agentSession = try await repository.getAgentSession(id: 800)
         let viewModel = TerminalViewModel()
+        viewModel.session = agentSession
 
-        await viewModel.configure(context: context, repository: repository)
-        await viewModel.sendEnter(repository: repository)
-        await viewModel.sendKey("C-c", repository: repository)
+        await viewModel.sendInput(.enterOnly(), repository: repository)
+        await viewModel.sendInput(.key("C-c"), repository: repository)
 
         #expect(repository.sentInputs[0].body.text == nil)
         #expect(repository.sentInputs[0].body.keys == ["Enter"])
