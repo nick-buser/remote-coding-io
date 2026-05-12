@@ -33,6 +33,38 @@ final class UserPreferences {
         didSet { store.set(appearance.rawValue, forKey: Keys.appearance) }
     }
 
+    /// Lowercase hex APNs token. `nil` when push has not been registered
+    /// (either the user denied authorization or hasn't been prompted).
+    /// Cleared on deregister.
+    var pushToken: String? {
+        didSet {
+            if let token = pushToken {
+                store.set(token, forKey: Keys.pushToken)
+            } else {
+                store.removeObject(forKey: Keys.pushToken)
+            }
+        }
+    }
+
+    /// Project IDs the user has muted server-side. Filtered before
+    /// dispatch in the backend — the device receives nothing for these.
+    var mutedProjectIDs: [Int64] {
+        didSet {
+            store.set(mutedProjectIDs.map(NSNumber.init), forKey: Keys.mutedProjectIDs)
+        }
+    }
+
+    /// Quiet hours window, expressed as UTC hours 0–23.
+    /// Both must be set to enable filtering server-side. Wrap-past-midnight
+    /// is supported (end < start means "from start to next-day end").
+    var quietHoursStart: Int? {
+        didSet { setOptionalInt(quietHoursStart, forKey: Keys.quietHoursStart) }
+    }
+
+    var quietHoursEnd: Int? {
+        didSet { setOptionalInt(quietHoursEnd, forKey: Keys.quietHoursEnd) }
+    }
+
     enum TextSize: String, Hashable, CaseIterable, Codable, Sendable {
         case small
         case `default`
@@ -85,6 +117,18 @@ final class UserPreferences {
         static let accent          = "user.accent"
         static let textSize        = "user.textSize"
         static let appearance      = "user.appearance"
+        static let pushToken       = "user.pushToken"
+        static let mutedProjectIDs = "user.mutedProjectIDs"
+        static let quietHoursStart = "user.quietHoursStart"
+        static let quietHoursEnd   = "user.quietHoursEnd"
+    }
+
+    private func setOptionalInt(_ value: Int?, forKey key: String) {
+        if let value {
+            store.set(value, forKey: key)
+        } else {
+            store.removeObject(forKey: key)
+        }
     }
 
     @ObservationIgnored private let store: UserDefaults
@@ -116,6 +160,14 @@ final class UserPreferences {
         } else {
             self.appearance = .system
         }
+
+        self.pushToken = store.string(forKey: Keys.pushToken)
+
+        let storedMuted = (store.array(forKey: Keys.mutedProjectIDs) as? [NSNumber]) ?? []
+        self.mutedProjectIDs = storedMuted.map { $0.int64Value }
+
+        self.quietHoursStart = store.object(forKey: Keys.quietHoursStart) as? Int
+        self.quietHoursEnd = store.object(forKey: Keys.quietHoursEnd) as? Int
     }
 }
 
