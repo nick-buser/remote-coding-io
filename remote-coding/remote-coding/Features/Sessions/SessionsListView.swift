@@ -4,6 +4,7 @@ import SwiftUI
 struct SessionsListView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(RootCoordinator.self) private var coordinator
+    @Environment(PushRegistrationService.self) private var pushService
     @Environment(\.colorScheme) private var scheme
 
     @State private var viewModel = SessionsListViewModel()
@@ -24,6 +25,7 @@ struct SessionsListView: View {
                 fetcher: CrossProjectFeatureFetcher(repository: appModel.repository),
                 repository: appModel.repository
             )
+            await pushService.requestPermissionIfNeeded()
         }
         .refreshable {
             await viewModel.load(
@@ -224,18 +226,34 @@ struct SessionsListView: View {
 }
 
 #Preview("Sessions — light") {
-    NavigationStack {
+    let appModel = AppModel(repository: MockTmuxAgentRepository())
+    let preferences = UserPreferences()
+    let pushService = PushRegistrationService(
+        repositoryProvider: { appModel.repository },
+        preferences: preferences,
+        pushSystem: MockPushSystem(initialStatus: .denied)
+    )
+    return NavigationStack {
         SessionsListView()
     }
-    .environment(AppModel(repository: MockTmuxAgentRepository()))
+    .environment(appModel)
     .environment(RootCoordinator())
+    .environment(pushService)
 }
 
 #Preview("Sessions — dark") {
-    NavigationStack {
+    let appModel = AppModel(repository: MockTmuxAgentRepository())
+    let preferences = UserPreferences()
+    let pushService = PushRegistrationService(
+        repositoryProvider: { appModel.repository },
+        preferences: preferences,
+        pushSystem: MockPushSystem(initialStatus: .denied)
+    )
+    return NavigationStack {
         SessionsListView()
     }
-    .environment(AppModel(repository: MockTmuxAgentRepository()))
+    .environment(appModel)
     .environment(RootCoordinator())
+    .environment(pushService)
     .preferredColorScheme(.dark)
 }

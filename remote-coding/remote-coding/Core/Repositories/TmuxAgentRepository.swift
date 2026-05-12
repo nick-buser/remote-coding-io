@@ -44,4 +44,6 @@ protocol TmuxAgentRepository {
     func listPanes(sessionName: String) async throws -> [Components.Schemas.Pane]
     func getPaneOutput(sessionName: String, paneID: Int) async throws -> Components.Schemas.PaneOutput
     func sendPaneInput(sessionName: String, paneID: Int, body: Components.Schemas.SendInputRequest) async throws -> Components.Schemas.StatusResponse
+    func registerDevice(_ body: Components.Schemas.DeviceRegistrationRequest) async throws -> Components.Schemas.DeviceRegistration
+    func deregisterDevice(token: String) async throws
 }

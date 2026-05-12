@@ -49,6 +49,16 @@ final class RootCoordinator {
         paths[target] = path
     }
 
+    /// Switches to the destination's tab and pushes its route (if any) onto
+    /// that tab's stack. Used by deep-link surfaces (push notifications,
+    /// universal links) to land the user on the right screen in one call.
+    func navigate(to destination: PushDestination) {
+        selectedTab = destination.tab
+        if let route = destination.route {
+            push(route, in: destination.tab)
+        }
+    }
+
     func popToRoot(in tab: AppTab) {
         paths[tab] = []
     }

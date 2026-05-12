@@ -93,6 +93,34 @@ struct RootCoordinatorTests {
         #expect(coordinator.selectedTab == .sessions)
     }
 
+    // MARK: - navigate(to:)
+
+    @Test func navigateSwitchesTabAndPushesRoute() {
+        let coordinator = RootCoordinator(store: makeStore(), storeKey: "nav")
+
+        coordinator.switchTab(.you)
+        coordinator.navigate(to: PushDestination(
+            tab: .inbox,
+            route: .agentSession(sessionID: 42)
+        ))
+
+        #expect(coordinator.selectedTab == .inbox)
+        #expect(coordinator.paths[.inbox] == [.agentSession(sessionID: 42)])
+    }
+
+    @Test func navigateWithNilRouteOnlySwitchesTab() {
+        let coordinator = RootCoordinator(store: makeStore(), storeKey: "nav-empty")
+        coordinator.switchTab(.sessions)
+        coordinator.push(.projectDetail(idOrSlug: "demo"))
+
+        coordinator.navigate(to: PushDestination(tab: .inbox, route: nil))
+
+        #expect(coordinator.selectedTab == .inbox)
+        #expect(coordinator.paths[.inbox] == [])
+        // Other tabs' paths are preserved.
+        #expect(coordinator.paths[.sessions] == [.projectDetail(idOrSlug: "demo")])
+    }
+
     // MARK: - Persistence
 
     /// Mutations made on one coordinator must be visible to a fresh

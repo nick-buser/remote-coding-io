@@ -74,13 +74,16 @@ receives must carry enough context to route without a network call:
   "project_id": 1,
   "feature_id": 13,
   "ticket_id": 208,
+  "ticket_public_id": "TMX-0050",
   "agent_session_id": 802
 }
 ```
 
 `agent_session_id` is present for `question` so the app can navigate directly
-to the terminal without resolving through the ticket. `ticket_id` is present
-for `review`. Either may be null if not applicable.
+to the terminal without resolving through the ticket. `ticket_public_id` is
+required for `review` — the iOS route uses the public id, so including it in
+the payload avoids a numeric-to-public lookup on tap (the contract has no
+GET-by-numeric-ticket-id endpoint). Either may be null if not applicable.
 
 ## iOS tickets
 
@@ -139,22 +142,24 @@ the Inbox unread dot immediately by injecting a synthetic `ActivityEvent` into
 
 ```
 kind == "question" && agent_session_id != nil
-    → AppRoute.agentSession(sessionID: agent_session_id)
+    → PushDestination(tab: .inbox, route: .agentSession(sessionID:))
 
-kind == "review" && ticket_id != nil
-    → AppRoute.review(ticketPublicID: resolvePublicID(ticket_id))
+kind == "review" && ticket_public_id != nil
+    → PushDestination(tab: .inbox, route: .ticketDetail(publicID:))
 
 default
-    → AppRoute.inbox (select Inbox tab, scroll to event if visible)
+    → PushDestination.inbox (select Inbox tab, no push)
 ```
+
+Routing is synchronous in the `PushRouter` struct — the backend includes
+`ticket_public_id` in the payload so there's no async lookup on tap.
 
 **Cold launch:** `AppDelegate.application(_:didFinishLaunchingWithOptions:)`
 checks `launchOptions[.remoteNotification]` and stashes the payload; the root
 coordinator consumes it once the view hierarchy is ready.
 
-`resolvePublicID` is a repository call (`getTicket(id:)` via a numeric-id
-lookup). If the call fails (session expired, ticket deleted) fall back to
-Inbox.
+If `ticket_public_id` is missing or malformed, fall back to Inbox. The
+router never makes a repository call — it's pure and synchronous.
 
 **Testing:** `service-push-deep-link` must be testable with mock payloads. The
 routing logic should live in a pure `PushRouter` struct that takes a

@@ -1987,6 +1987,49 @@ components:
           nullable: true
           description: UTC hour (0–23) at which quiet hours end.
 
+    PushPayload:
+      type: object
+      description: |
+        Documentary schema for the `userInfo` dict the iOS app receives on
+        a push delivery. The wire format is the APNs binary; this entry
+        captures the contract so iOS and the backend agree on field
+        names. `kind` discriminates routing on the device.
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [question, review]
+          description: |
+            Drives routing on tap. Other ActivityEvent kinds do not produce a push.
+        activity_event_id:
+          type: integer
+          format: int64
+        project_id:
+          type: integer
+          format: int64
+          nullable: true
+        feature_id:
+          type: integer
+          format: int64
+          nullable: true
+        ticket_id:
+          type: integer
+          format: int64
+          nullable: true
+          description: Numeric ticket id, present for review pushes.
+        ticket_public_id:
+          type: string
+          pattern: "^TMX-[0-9]{4}$"
+          nullable: true
+          description: |
+            Public ticket id (`TMX-####`). Required for `review` pushes so
+            the iOS deep-link can route without a numeric→public lookup.
+        agent_session_id:
+          type: integer
+          format: int64
+          nullable: true
+          description: Required for `question` pushes.
+
     DeviceRegistration:
       type: object
       required: [device_token, environment]
