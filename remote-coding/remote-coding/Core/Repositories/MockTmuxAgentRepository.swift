@@ -562,11 +562,15 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
         let projectFeatureIDs = Set(features.filter { $0.projectId == project.id }.map(\.id))
         return agentSessions
             .filter { session in
-                guard let ticketID = session.ticketId,
-                      let ticket = tickets.first(where: { $0.id == ticketID }) else {
-                    return false
-                }
-                return projectFeatureIDs.contains(ticket.featureId)
+                // Project-scoped session
+                if session.projectId == project.id { return true }
+                // Feature-scoped session belonging to this project
+                if let fid = session.featureId, projectFeatureIDs.contains(fid) { return true }
+                // Ticket-scoped session belonging to this project
+                if let ticketID = session.ticketId,
+                   let ticket = tickets.first(where: { $0.id == ticketID }),
+                   projectFeatureIDs.contains(ticket.featureId) { return true }
+                return false
             }
             .sorted { $0.lastActiveAt > $1.lastActiveAt }
     }
@@ -581,48 +585,98 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
     }
 
     func createAgentSession(_ body: Components.Schemas.CreateAgentSessionRequest) async throws -> Components.Schemas.AgentSession {
-        guard let ticket = tickets.first(where: { $0.publicId == body.ticketPublicId }) else {
-            throw MockRepositoryError.notFound
-        }
-        guard let feature = features.first(where: { $0.id == ticket.featureId }) else {
-            throw MockRepositoryError.notFound
-        }
-        guard let project = projects.first(where: { $0.id == feature.projectId }) else {
-            throw MockRepositoryError.notFound
-        }
         let now = Date()
-        let derivedTmux = body.tmuxSession ?? Self.derivedTmuxSessionName(
-            project: project, feature: feature, ticket: ticket
-        )
-        let session = Components.Schemas.AgentSession(
-            id: nextAgentSessionID,
-            ticketId: ticket.id,
-            tmuxSession: derivedTmux,
-            state: body.state ?? .idle,
-            pane: body.pane,
-            cpu: body.cpu ?? 0,
-            startTime: now,
-            endTime: nil,
-            lastActiveAt: now,
-            transcriptKey: nil,
-            tokenUsage: nil,
-            costEstimate: nil,
-            createdAt: now
-        )
+        let newID = nextAgentSessionID
         nextAgentSessionID += 1
+
+        let session: Components.Schemas.AgentSession
+        let project: Components.Schemas.Project
+        let activityFeatureID: Int64?
+        let activityTicketID: Int64?
+
+        if let publicId = body.ticketPublicId {
+            // --- Ticket-scoped ---
+            guard let ticket = tickets.first(where: { $0.publicId == publicId }) else {
+                throw MockRepositoryError.notFound
+            }
+            guard let feature = features.first(where: { $0.id == ticket.featureId }) else {
+                throw MockRepositoryError.notFound
+            }
+            guard let proj = projects.first(where: { $0.id == feature.projectId }) else {
+                throw MockRepositoryError.notFound
+            }
+            project = proj
+            activityFeatureID = feature.id
+            activityTicketID = ticket.id
+            let tmux = body.tmuxSession ?? Self.derivedTmuxSessionName(
+                project: proj, feature: feature, ticket: ticket
+            )
+            session = Components.Schemas.AgentSession(
+                id: newID, ticketId: ticket.id, featureId: nil, projectId: nil,
+                tmuxSession: tmux, state: body.state ?? .idle,
+                pane: body.pane, cpu: body.cpu ?? 0,
+                startTime: now, endTime: nil, lastActiveAt: now,
+                transcriptKey: nil, tokenUsage: nil, costEstimate: nil, createdAt: now
+            )
+
+        } else if let featureId = body.featureId {
+            // --- Feature-scoped ---
+            guard let feature = features.first(where: { $0.id == featureId }) else {
+                throw MockRepositoryError.notFound
+            }
+            guard let proj = projects.first(where: { $0.id == feature.projectId }) else {
+                throw MockRepositoryError.notFound
+            }
+            project = proj
+            activityFeatureID = feature.id
+            activityTicketID = nil
+            let tmux = body.tmuxSession
+                ?? "\(Self.sluggify(proj.slug))__\(Self.sluggify(feature.slug))__session_\(featureId)"
+            session = Components.Schemas.AgentSession(
+                id: newID, ticketId: nil, featureId: featureId, projectId: nil,
+                tmuxSession: tmux, state: body.state ?? .idle,
+                pane: body.pane, cpu: body.cpu ?? 0,
+                startTime: now, endTime: nil, lastActiveAt: now,
+                transcriptKey: nil, tokenUsage: nil, costEstimate: nil, createdAt: now
+            )
+
+        } else if let projectId = body.projectId {
+            // --- Project-scoped ---
+            guard let proj = projects.first(where: { $0.id == projectId }) else {
+                throw MockRepositoryError.notFound
+            }
+            project = proj
+            activityFeatureID = nil
+            activityTicketID = nil
+            let tmux = body.tmuxSession
+                ?? "\(Self.sluggify(proj.slug))__session_\(projectId)"
+            session = Components.Schemas.AgentSession(
+                id: newID, ticketId: nil, featureId: nil, projectId: projectId,
+                tmuxSession: tmux, state: body.state ?? .idle,
+                pane: body.pane, cpu: body.cpu ?? 0,
+                startTime: now, endTime: nil, lastActiveAt: now,
+                transcriptKey: nil, tokenUsage: nil, costEstimate: nil, createdAt: now
+            )
+
+        } else {
+            throw MockRepositoryError.problem(
+                field: "scope",
+                code: "required",
+                message: "At least one of ticket_public_id, feature_id, or project_id is required."
+            )
+        }
+
         agentSessions.append(session)
-        // Activity feed mirror — service-repo-activity is in place, so
-        // the poller / Inbox sees the spawn without an extra fetch.
         activityEvents.append(Components.Schemas.ActivityEvent(
             id: nextActivityEventID,
             projectId: project.id,
-            featureId: feature.id,
-            ticketId: ticket.id,
+            featureId: activityFeatureID,
+            ticketId: activityTicketID,
             actor: .agent,
-            actorName: derivedTmux,
+            actorName: session.tmuxSession,
             verb: "spawned session",
             kind: .check,
-            detail: "tmux: \(derivedTmux)",
+            detail: "tmux: \(session.tmuxSession)",
             createdAt: now
         ))
         nextActivityEventID += 1
@@ -1633,12 +1687,41 @@ private extension MockTmuxAgentRepository {
     static func seedAgentSessions() -> (sessions: [Components.Schemas.AgentSession], nextID: Int64) {
         struct Spec {
             let ticketID: Int64?
+            let featureID: Int64?
+            let projectID: Int64?
             let tmuxSession: String
             let state: Components.Schemas.SessionState
             let pane: String
             let cpu: Double
             let startMinutesAgo: Double
             let lastActiveMinutesAgo: Double
+
+            init(ticketID: Int64?, tmuxSession: String,
+                 state: Components.Schemas.SessionState, pane: String, cpu: Double,
+                 startMinutesAgo: Double, lastActiveMinutesAgo: Double) {
+                self.ticketID = ticketID; self.featureID = nil; self.projectID = nil
+                self.tmuxSession = tmuxSession; self.state = state; self.pane = pane
+                self.cpu = cpu; self.startMinutesAgo = startMinutesAgo
+                self.lastActiveMinutesAgo = lastActiveMinutesAgo
+            }
+
+            init(featureID: Int64, tmuxSession: String,
+                 state: Components.Schemas.SessionState, pane: String, cpu: Double,
+                 startMinutesAgo: Double, lastActiveMinutesAgo: Double) {
+                self.ticketID = nil; self.featureID = featureID; self.projectID = nil
+                self.tmuxSession = tmuxSession; self.state = state; self.pane = pane
+                self.cpu = cpu; self.startMinutesAgo = startMinutesAgo
+                self.lastActiveMinutesAgo = lastActiveMinutesAgo
+            }
+
+            init(projectID: Int64, tmuxSession: String,
+                 state: Components.Schemas.SessionState, pane: String, cpu: Double,
+                 startMinutesAgo: Double, lastActiveMinutesAgo: Double) {
+                self.ticketID = nil; self.featureID = nil; self.projectID = projectID
+                self.tmuxSession = tmuxSession; self.state = state; self.pane = pane
+                self.cpu = cpu; self.startMinutesAgo = startMinutesAgo
+                self.lastActiveMinutesAgo = lastActiveMinutesAgo
+            }
         }
         let specs: [Spec] = [
             // session-04 → TMX-0042 (ticket id 200), idle, 2h 14m uptime
@@ -1656,7 +1739,15 @@ private extension MockTmuxAgentRepository {
             // session-08 → TMX-0048 (ticket id 206), active, 22m
             Spec(ticketID: 206, tmuxSession: "tmux_agent__feature_context_bundle__feat_tmx_0048_prd_resolver",
                  state: .active, pane: "agent:1.1", cpu: 18,
-                 startMinutesAgo: 22, lastActiveMinutesAgo: 1)
+                 startMinutesAgo: 22, lastActiveMinutesAgo: 1),
+            // session-09 — feature-scoped, feature 12 (FEAT-019 feature-context-bundle), active, 31m
+            Spec(featureID: 12, tmuxSession: "tmux_agent__feature_context_bundle__session_12",
+                 state: .active, pane: "agent:3.0", cpu: 8,
+                 startMinutesAgo: 31, lastActiveMinutesAgo: 2),
+            // session-10 — project-scoped, project 1 (tmux-agent), idle, 1h 12m
+            Spec(projectID: 1, tmuxSession: "tmux_agent__session_1",
+                 state: .idle, pane: "agent:4.0", cpu: 1,
+                 startMinutesAgo: 72, lastActiveMinutesAgo: 14)
         ]
 
         var sessions: [Components.Schemas.AgentSession] = []
@@ -1667,6 +1758,8 @@ private extension MockTmuxAgentRepository {
             sessions.append(Components.Schemas.AgentSession(
                 id: sessionID,
                 ticketId: spec.ticketID,
+                featureId: spec.featureID,
+                projectId: spec.projectID,
                 tmuxSession: spec.tmuxSession,
                 state: spec.state,
                 pane: spec.pane,
