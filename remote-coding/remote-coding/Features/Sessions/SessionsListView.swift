@@ -128,7 +128,7 @@ struct SessionsListView: View {
                         .themeMonoSm()
                         .foregroundStyle(Theme.Text.fg2(scheme))
                 }
-                Text(metadata.ticket?.title ?? session.tmuxSession)
+                Text(metadata.ticket?.title ?? metadata.project?.name ?? session.tmuxSession)
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(Theme.Text.fg(scheme))
                     .lineLimit(2)
@@ -228,6 +228,7 @@ struct SessionsListView: View {
         return SessionRow(
             session: session,
             ticketLabel: metadata.ticket?.publicId,
+            scopeTitle: metadata.ticket?.title ?? metadata.project?.name,
             onTap: {
                 coordinator.push(.agentSession(sessionID: session.id), in: .sessions)
             }

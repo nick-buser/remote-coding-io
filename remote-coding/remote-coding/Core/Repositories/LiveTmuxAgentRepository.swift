@@ -548,6 +548,20 @@ final class LiveTmuxAgentRepository: TmuxAgentRepository {
         }
     }
 
+    func killAgentSession(id: Int64) async throws {
+        let output = try await client.killAgentSession(.init(path: .init(id: id)))
+        switch output {
+        case .noContent:
+            return
+        case .notFound(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .serviceUnavailable(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .undocumented(let statusCode, _):
+            throw RepositoryError.http(statusCode)
+        }
+    }
+
     // MARK: Ticket review
 
     func getTicketDiff(publicID: String) async throws -> Components.Schemas.TicketDiff {

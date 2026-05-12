@@ -399,6 +399,29 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
+  /api/v1/agent-sessions/{id}:
+    delete:
+      operationId: killAgentSession
+      summary: Kill (terminate) an agent session
+      description: |
+        Terminates the agent session and its underlying tmux pane. The session
+        transitions to `ended` state. Returns 204 on success.
+      tags: [AgentSessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "204":
+          description: Session killed
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
   /api/v1/projects/{idOrSlug}/features:
     get:
       operationId: listFeatures

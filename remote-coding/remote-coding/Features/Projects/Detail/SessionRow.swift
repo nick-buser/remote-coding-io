@@ -6,6 +6,9 @@ import SwiftUI
 struct SessionRow: View {
     let session: Components.Schemas.AgentSession
     var ticketLabel: String? = nil
+    /// Optional human-readable scope title shown below the tmux session name.
+    /// E.g. the ticket title, feature title, or project name.
+    var scopeTitle: String? = nil
     var onTap: () -> Void = {}
 
     @Environment(\.colorScheme) private var scheme
@@ -22,6 +25,13 @@ struct SessionRow: View {
                         .foregroundStyle(Theme.Text.fg(scheme))
                         .lineLimit(1)
                         .truncationMode(.middle)
+                    if let scopeTitle {
+                        Text(scopeTitle)
+                            .font(.system(size: 12, weight: .regular))
+                            .foregroundStyle(Theme.Text.fg2(scheme))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
                 }
                 Spacer(minLength: 0)
                 Chevron()
