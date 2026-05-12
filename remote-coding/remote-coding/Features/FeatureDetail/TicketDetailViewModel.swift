@@ -14,6 +14,10 @@ final class TicketDetailViewModel {
     var editingTitle: String
     var editingDescription: String
 
+    // Loaded after initial load for spawn context; nil until resolved.
+    var feature: Components.Schemas.Feature?
+    var project: Components.Schemas.Project?
+
     private let repository: TmuxAgentRepository
 
     init(ticket: Components.Schemas.Ticket, repository: TmuxAgentRepository) {
@@ -36,6 +40,11 @@ final class TicketDetailViewModel {
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
+        }
+        // Load feature + project for spawn context; failures are non-fatal.
+        if let feat = try? await repository.getFeature(id: ticket.featureId) {
+            feature = feat
+            project = try? await repository.getProject(idOrSlug: String(feat.projectId))
         }
     }
 

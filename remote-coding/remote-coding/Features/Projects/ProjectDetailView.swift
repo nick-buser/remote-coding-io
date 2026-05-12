@@ -16,6 +16,7 @@ struct ProjectDetailView: View {
     @State private var section: String = ProjectDetailSection.features.rawValue
     @State private var showEditSheet = false
     @State private var showCreateFeatureSheet = false
+    @State private var showSpawnSheet = false
     @State private var showDeleteConfirm = false
     @State private var didDelete = false
     @State private var actionError: String?
@@ -54,6 +55,15 @@ struct ProjectDetailView: View {
                 viewModel.features.insert(feature, at: 0)
                 coordinator.push(.featureDetail(featureID: feature.id), in: .projects)
             }
+        }
+        .sheet(isPresented: $showSpawnSheet) {
+            SpawnSheet(
+                viewModel: SpawnSheetViewModel(
+                    entry: .project(viewModel.project),
+                    repository: appModel.repository,
+                    coordinator: coordinator
+                )
+            )
         }
         .confirmationDialog(
             "Delete project?",
@@ -361,7 +371,7 @@ struct ProjectDetailView: View {
 
     private var sessionsBody: some View {
         let sessions = viewModel.agentSessions
-        return Group {
+        return VStack(alignment: .leading, spacing: Theme.Spacing.s4) {
             if sessions.isEmpty {
                 EmptyState(
                     systemImage: "terminal",
@@ -380,6 +390,11 @@ struct ProjectDetailView: View {
                     }
                 }
             }
+            PillButton(title: "Spawn session", role: .secondary, accent: appModel.accent, wide: true) {
+                showSpawnSheet = true
+            }
+            .padding(.horizontal, Theme.Spacing.s4)
+            .padding(.top, Theme.Spacing.s2)
         }
     }
 
