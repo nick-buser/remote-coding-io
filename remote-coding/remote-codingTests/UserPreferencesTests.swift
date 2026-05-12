@@ -23,6 +23,46 @@ struct UserPreferencesTests {
         #expect(prefs.accent == .iris)
         #expect(prefs.textSize == .default)
         #expect(prefs.appearance == .system)
+        #expect(prefs.pushToken == nil)
+        #expect(prefs.mutedProjectIDs.isEmpty)
+        #expect(prefs.quietHoursStart == nil)
+        #expect(prefs.quietHoursEnd == nil)
+    }
+
+    // MARK: - Push fields
+
+    @MainActor
+    @Test func pushTokenPersistsAndCanBeCleared() async {
+        let store = makeStore()
+        let first = UserPreferences(store: store)
+        first.pushToken = "abc123"
+
+        let second = UserPreferences(store: store)
+        #expect(second.pushToken == "abc123")
+
+        second.pushToken = nil
+        let third = UserPreferences(store: store)
+        #expect(third.pushToken == nil)
+    }
+
+    @MainActor
+    @Test func mutedProjectIDsAndQuietHoursPersist() async {
+        let store = makeStore()
+        let first = UserPreferences(store: store)
+        first.mutedProjectIDs = [1, 7, 42]
+        first.quietHoursStart = 22
+        first.quietHoursEnd = 7
+
+        let second = UserPreferences(store: store)
+        #expect(second.mutedProjectIDs == [1, 7, 42])
+        #expect(second.quietHoursStart == 22)
+        #expect(second.quietHoursEnd == 7)
+
+        second.quietHoursStart = nil
+        second.quietHoursEnd = nil
+        let third = UserPreferences(store: store)
+        #expect(third.quietHoursStart == nil)
+        #expect(third.quietHoursEnd == nil)
     }
 
     // MARK: - Persistence

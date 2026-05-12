@@ -701,4 +701,34 @@ final class LiveTmuxAgentRepository: TmuxAgentRepository {
             throw RepositoryError.http(statusCode)
         }
     }
+
+    // MARK: Notifications
+
+    func registerDevice(_ body: Components.Schemas.DeviceRegistrationRequest) async throws -> Components.Schemas.DeviceRegistration {
+        let output = try await client.registerDevice(.init(body: .json(body)))
+        switch output {
+        case .ok(let response):
+            return try response.body.json
+        case .badRequest(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .serviceUnavailable(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .undocumented(let statusCode, _):
+            throw RepositoryError.http(statusCode)
+        }
+    }
+
+    func deregisterDevice(token: String) async throws {
+        let output = try await client.deregisterDevice(.init(path: .init(deviceToken: token)))
+        switch output {
+        case .noContent:
+            return
+        case .notFound(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .serviceUnavailable(let response):
+            throw RepositoryError.problem(try response.body.applicationProblemJson)
+        case .undocumented(let statusCode, _):
+            throw RepositoryError.http(statusCode)
+        }
+    }
 }

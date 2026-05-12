@@ -953,6 +953,51 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
+  /api/v1/devices:
+    post:
+      operationId: registerDevice
+      summary: Register (or re-register) an APNs device token
+      description: |
+        Idempotent — re-registering an existing token updates its mute list and
+        quiet-hours fields rather than erroring. The backend filters push
+        dispatch by these fields server-side.
+      tags: [Notifications]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeviceRegistrationRequest"
+      responses:
+        "200":
+          description: Device registration accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceRegistration"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/devices/{deviceToken}:
+    delete:
+      operationId: deregisterDevice
+      summary: Deregister an APNs device token
+      description: |
+        Called when the user disables push in settings or signs out. Removes
+        the registration so the backend stops dispatching pushes to this token.
+      tags: [Notifications]
+      parameters:
+        - $ref: "#/components/parameters/DeviceToken"
+      responses:
+        "204":
+          description: Device deregistered
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
   /api/v1/activity:
     get:
       operationId: listActivity
@@ -1076,6 +1121,15 @@ components:
         type: integer
         format: int64
       description: Decision ID
+
+    DeviceToken:
+      name: deviceToken
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[0-9a-f]{64}$"
+      description: Hex-encoded APNs device token
 
   schemas:
     # Health
@@ -1888,6 +1942,127 @@ components:
           type: string
           description: Human-readable error message
 
+    DeviceEnvironment:
+      type: string
+      enum: [sandbox, production]
+      description: |
+        Distinguishes which APNs gateway should receive pushes for this device.
+        Debug iOS builds register as `sandbox`; App Store / TestFlight builds
+        register as `production`.
+
+    DeviceRegistrationRequest:
+      type: object
+      required: [device_token, environment]
+      properties:
+        device_token:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+          description: |
+            Hex-encoded APNs token from
+            `didRegisterForRemoteNotificationsWithDeviceToken`.
+        environment:
+          $ref: "#/components/schemas/DeviceEnvironment"
+        muted_project_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+          description: |
+            Server-side mute list. Pushes whose `project_id` is in this list
+            are suppressed before dispatch.
+        quiet_hours_start:
+          type: integer
+          minimum: 0
+          maximum: 23
+          nullable: true
+          description: |
+            UTC hour (0–23) at which quiet hours begin. When both
+            `quiet_hours_start` and `quiet_hours_end` are set, pushes are
+            suppressed for any time at or after start and before end. Wraps
+            past midnight if end is numerically less than start.
+        quiet_hours_end:
+          type: integer
+          minimum: 0
+          maximum: 23
+          nullable: true
+          description: UTC hour (0–23) at which quiet hours end.
+
+    PushPayload:
+      type: object
+      description: |
+        Documentary schema for the `userInfo` dict the iOS app receives on
+        a push delivery. The wire format is the APNs binary; this entry
+        captures the contract so iOS and the backend agree on field
+        names. `kind` discriminates routing on the device.
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [question, review]
+          description: |
+            Drives routing on tap. Other ActivityEvent kinds do not produce a push.
+        activity_event_id:
+          type: integer
+          format: int64
+        project_id:
+          type: integer
+          format: int64
+          nullable: true
+        feature_id:
+          type: integer
+          format: int64
+          nullable: true
+        ticket_id:
+          type: integer
+          format: int64
+          nullable: true
+          description: Numeric ticket id, present for review pushes.
+        ticket_public_id:
+          type: string
+          pattern: "^TMX-[0-9]{4}$"
+          nullable: true
+          description: |
+            Public ticket id (`TMX-####`). Required for `review` pushes so
+            the iOS deep-link can route without a numeric→public lookup.
+        agent_session_id:
+          type: integer
+          format: int64
+          nullable: true
+          description: Required for `question` pushes.
+
+    DeviceRegistration:
+      type: object
+      required: [device_token, environment]
+      properties:
+        device_token:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+        environment:
+          $ref: "#/components/schemas/DeviceEnvironment"
+        muted_project_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+        quiet_hours_start:
+          type: integer
+          minimum: 0
+          maximum: 23
+          nullable: true
+        quiet_hours_end:
+          type: integer
+          minimum: 0
+          maximum: 23
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+
   responses:
     BadRequest:
       description: Invalid request
@@ -1945,3 +2120,5 @@ tags:
     description: Activity feed across workspace, project, and feature scopes
   - name: Review
     description: Ticket review — diff, approve, request changes, send back
+  - name: Notifications
+    description: APNs device token registration and push dispatch

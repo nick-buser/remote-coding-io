@@ -36,6 +36,8 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
     // the highest fixture so generated TMX-#### values don't collide.
     private var nextTicketPublicSequence: Int
     private(set) var sentInputs: [SentInput] = []
+    private(set) var registeredDevices: [Components.Schemas.DeviceRegistration] = []
+    private(set) var deregisteredDeviceTokens: [String] = []
 
     init() {
         projects = Self.decode([Components.Schemas.Project].self, from: Self.projectsJSON)
@@ -803,6 +805,32 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
         output.content += transcriptLine(for: body)
         outputsByPane[key] = output
         return Components.Schemas.StatusResponse(status: "sent")
+    }
+
+    func registerDevice(_ body: Components.Schemas.DeviceRegistrationRequest) async throws -> Components.Schemas.DeviceRegistration {
+        let now = Date()
+        let existingIndex = registeredDevices.firstIndex { $0.deviceToken == body.deviceToken }
+        let createdAt = existingIndex.map { registeredDevices[$0].createdAt ?? now } ?? now
+        let registration = Components.Schemas.DeviceRegistration(
+            deviceToken: body.deviceToken,
+            environment: body.environment,
+            mutedProjectIds: body.mutedProjectIds,
+            quietHoursStart: body.quietHoursStart,
+            quietHoursEnd: body.quietHoursEnd,
+            createdAt: createdAt,
+            updatedAt: now
+        )
+        if let index = existingIndex {
+            registeredDevices[index] = registration
+        } else {
+            registeredDevices.append(registration)
+        }
+        return registration
+    }
+
+    func deregisterDevice(token: String) async throws {
+        deregisteredDeviceTokens.append(token)
+        registeredDevices.removeAll { $0.deviceToken == token }
     }
 
     private func transcriptLine(for body: Components.Schemas.SendInputRequest) -> String {

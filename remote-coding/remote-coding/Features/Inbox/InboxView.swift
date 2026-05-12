@@ -10,6 +10,7 @@ import SwiftUI
 struct InboxView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(RootCoordinator.self) private var coordinator
+    @Environment(PushRegistrationService.self) private var pushService
     @Environment(\.colorScheme) private var scheme
     @State private var viewModel = InboxViewModel()
     @State private var replyContext: ReplyContext?
@@ -192,6 +193,11 @@ struct InboxView: View {
     private func handleSecondary(_ event: Components.Schemas.ActivityEvent) {
         // Question / review secondary actions both route the user to a
         // detail surface; route() picks the right one per kind.
+        if event.kind == .question {
+            // First sign of intent to engage with agent activity — request
+            // push permission so subsequent questions can ping the user.
+            Task { await pushService.requestPermissionIfNeeded() }
+        }
         handleRowTap(event)
     }
 }
@@ -204,6 +210,15 @@ extension ReplyContext: Identifiable {
 
 // MARK: - Previews
 
+@MainActor
+private func makeInboxPreviewPushService(for model: AppModel) -> PushRegistrationService {
+    PushRegistrationService(
+        repositoryProvider: { model.repository },
+        preferences: UserPreferences(),
+        pushSystem: MockPushSystem(initialStatus: .denied)
+    )
+}
+
 #Preview("Inbox — light") {
     let model = AppModel(repository: MockTmuxAgentRepository())
     return NavigationStack {
@@ -211,6 +226,7 @@ extension ReplyContext: Identifiable {
     }
     .environment(model)
     .environment(RootCoordinator())
+    .environment(makeInboxPreviewPushService(for: model))
     .task {
         await model.activityPoller.tick()
     }
@@ -223,6 +239,7 @@ extension ReplyContext: Identifiable {
     }
     .environment(model)
     .environment(RootCoordinator())
+    .environment(makeInboxPreviewPushService(for: model))
     .preferredColorScheme(.dark)
     .task {
         await model.activityPoller.tick()
@@ -236,6 +253,7 @@ extension ReplyContext: Identifiable {
     }
     .environment(model)
     .environment(RootCoordinator())
+    .environment(makeInboxPreviewPushService(for: model))
 }
 
 /// Preview-only repository that returns no activity events but still
@@ -372,5 +390,11 @@ private final class EmptyInboxRepository: TmuxAgentRepository {
     }
     func sendPaneInput(sessionName: String, paneID: Int, body: Components.Schemas.SendInputRequest) async throws -> Components.Schemas.StatusResponse {
         try await underlying.sendPaneInput(sessionName: sessionName, paneID: paneID, body: body)
+    }
+    func registerDevice(_ body: Components.Schemas.DeviceRegistrationRequest) async throws -> Components.Schemas.DeviceRegistration {
+        try await underlying.registerDevice(body)
+    }
+    func deregisterDevice(token: String) async throws {
+        try await underlying.deregisterDevice(token: token)
     }
 }
