@@ -6,6 +6,9 @@
 //
 
 import SwiftUI
+#if canImport(UserNotifications)
+import UserNotifications
+#endif
 
 @main
 struct remote_codingApp: App {
@@ -48,6 +51,8 @@ struct remote_codingApp: App {
                     // persisted user preference at startup.
                     appModel.accent = preferences.accent
                     bindPushDelegate()
+                    bindNotificationCenter()
+                    consumeLaunchPayloadIfNeeded()
                 }
         }
     }
@@ -60,6 +65,31 @@ struct remote_codingApp: App {
         appDelegate.onDeviceRegistrationFailed = { [pushService] error in
             Task { @MainActor in pushService.handleRegistrationFailure(error) }
         }
+        #endif
+    }
+
+    private func bindNotificationCenter() {
+        #if canImport(UserNotifications)
+        let bridge = PushDelegateBridge(
+            onNavigate: { [coordinator] destination in
+                coordinator.navigate(to: destination)
+            },
+            onForegroundArrival: { [appModel] in
+                Task { await appModel.activityPoller.tick() }
+            }
+        )
+        #if canImport(UIKit)
+        appDelegate.notificationDelegate = bridge
+        #endif
+        UNUserNotificationCenter.current().delegate = bridge
+        #endif
+    }
+
+    private func consumeLaunchPayloadIfNeeded() {
+        #if canImport(UIKit)
+        guard let payload = appDelegate.consumePendingLaunchPayload() else { return }
+        let destination = PushRouter().destination(for: payload)
+        coordinator.navigate(to: destination)
         #endif
     }
 }
