@@ -328,8 +328,9 @@ paths:
       operationId: listProjectSessions
       summary: List agent sessions for a project
       description: |
-        Returns agent_sessions joined through the project's features. This is
-        the live-session strip shown in the PM hub sidebar and project detail.
+        Returns all agent_sessions for the project regardless of scope —
+        ticket-scoped, feature-scoped, and project-scoped sessions are all
+        included. Used by the Sessions tab and project detail.
       tags: [AgentSessions]
       parameters:
         - $ref: "#/components/parameters/ProjectIdentifier"
@@ -371,12 +372,12 @@ paths:
   /api/v1/agent-sessions:
     post:
       operationId: createAgentSession
-      summary: Create an agent session bound to a ticket
+      summary: Create an agent session at ticket, feature, or project scope
       description: |
-        Create a new agent_sessions row. `ticket_public_id` is required; the
-        server derives the branch name, opens the local git branch, and
-        creates a tmux session named `<project_slug>__<feature_slug>__<branch_slug>`
-        (or honours an explicit `tmux_session` override).
+        Create a new agent_sessions row. At least one of `ticket_public_id`,
+        `feature_id`, or `project_id` must be present. The server derives the
+        tmux session name from the scope and injects the appropriate agent
+        context (see `CreateAgentSessionRequest` for details).
       tags: [AgentSessions]
       requestBody:
         required: true
@@ -1838,6 +1839,16 @@ components:
           type: integer
           format: int64
           nullable: true
+        feature_id:
+          type: integer
+          format: int64
+          nullable: true
+          description: Set for feature-scoped sessions; null for ticket- and project-scoped.
+        project_id:
+          type: integer
+          format: int64
+          nullable: true
+          description: Set for project-scoped sessions; null for ticket- and feature-scoped.
         tmux_session:
           type: string
         state:
@@ -1871,25 +1882,40 @@ components:
 
     CreateAgentSessionRequest:
       type: object
-      required: [ticket_public_id]
       description: |
-        Spawn a session for a ticket. The server derives the ticket's
-        `branch_name` (per ADR 0002) if missing and persists it back. When the
-        project has a `local_repo_path`, a local git branch is created
-        (idempotent — no-op if already present). When tmux is available on
-        the host, a tmux session is started in `local_repo_path` with a
-        composed name of `<project_slug>__<feature_slug>__<branch_slug>`.
-        The composed name is also written to the new `agent_sessions` row.
-        An explicit `tmux_session` in the request is honoured verbatim.
+        Spawn a new agent session at one of three scopes: ticket, feature, or
+        project. Exactly one of `ticket_public_id`, `feature_id`, or
+        `project_id` must be present (higher-specificity fields take precedence
+        if multiple are provided; they must be consistent).
+
+        **Session-name derivation (when `tmux_session` is omitted):**
+        - Ticket:  `<project_slug>__<feature_slug>__<branch_slug>`
+        - Feature: `<project_slug>__<feature_slug>__session_<epoch_sec>`
+        - Project: `<project_slug>__session_<epoch_sec>`
+
+        **Agent context injected by the server:**
+        - Ticket:  feature PRD + decisions + acceptance checklist
+        - Feature: feature PRD + decisions + open ticket list
+        - Project: project brief only
       properties:
         ticket_public_id:
           type: string
           pattern: "^TMX-[0-9]{4}$"
+          description: Present for ticket-scoped sessions.
+        feature_id:
+          type: integer
+          format: int64
+          description: Present for feature-scoped sessions. Ignored if ticket_public_id is set.
+        project_id:
+          type: integer
+          format: int64
+          description: Present for project-scoped sessions. Ignored if feature_id or ticket_public_id is set.
         tmux_session:
           type: string
           minLength: 1
           description: |
-            Optional override; when omitted the server derives a composed name.
+            Optional override; when omitted the server derives a composed name
+            from the scope fields above.
         state:
           $ref: "#/components/schemas/SessionState"
         pane:
