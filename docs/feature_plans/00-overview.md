@@ -57,7 +57,7 @@ Activity events cross-cut the hierarchy. A single `ActivityEvent` carries option
 
 ## Phase plan
 
-The work is sliced into five phases. Each phase is a coherent slice that leaves the app in a working, demonstrable state.
+The work is sliced into seven phases. Each phase is a coherent slice that leaves the app in a working, demonstrable state.
 
 ### Phase 0 — Foundation
 Bring the iOS data layer and design system in line with the contract before touching screens.
@@ -122,46 +122,64 @@ Replace the prototype terminal with the v2 dark chrome and wire real WebSocket t
 - **`service-empty-states`**: All-clear inbox, empty sessions, empty milestone copy, etc.
 - **`service-mock-rich-seed`**: Rebuild the mock fixtures from `data.jsx` so previews match the design narrative.
 
+### Phase 6 — Push notifications
+Surface agent activity as APNs push notifications so the user is paged when an agent needs input or opens a review. Requires new backend endpoints (device registration + push dispatch). See `60-push-notifications.md`.
+
+- **`infra-apns-backend`** *(parent-repo ticket)*: Add `POST /api/v1/devices` (register) and `DELETE /api/v1/devices/{token}` (deregister) to `openapi.yaml`; implement APNs dispatch on `ActivityEvent` creation for `question` and `review` kinds.
+- **`infra-push-openapi-regen`**: Pull the updated contract and regenerate the Swift client.
+- **`service-push-permission`**: `UNUserNotificationCenter` permission request on first meaningful interaction, APNs token → `POST /api/v1/devices`, token rotation on `didRegisterForRemoteNotificationsWithDeviceToken`.
+- **`service-push-deep-link`**: `UNUserNotificationCenterDelegate.didReceive(_:)` — map push payload to `AppRoute` and navigate: `question` → terminal session, `review` → review screen, default → Inbox. Handle cold-launch case (app not running when tap arrives).
+- **`service-push-settings`**: Push notifications group in You screen — master toggle, per-project mute list, quiet-hours window. Persisted in `AppSettings`.
+
+### Phase 7 — Ticket detail + multi-scope session spawning
+Complete the ticket lifecycle surface and replace the placeholder "Spawn session" button with a real multi-step spawn sheet. Sessions can be scoped to a ticket, a feature, or a project — not every session needs a specific ticket. Requires extending the backend spawn contract. See `70-spawn-ux.md`.
+
+- **`infra-spawn-scope`** *(parent-repo ticket)*: Make `ticket_public_id` optional in `CreateAgentSessionRequest`; add optional `feature_id` and `project_id`. At least one must be present. Backend derives session name from the deepest scope provided and creates the tmux session accordingly.
+- **`infra-spawn-openapi-regen`**: Pull the updated contract and regenerate the Swift client.
+- **`service-ticket-detail`**: Full ticket detail view — title, description, status (editable inline), acceptance criteria (list + toggleable), branch name chip, linked agent sessions. Reached from `FeatureDetail` tickets tab and from push deep-links via `AppRoute.ticketDetail(publicID:)`.
+- **`service-spawn-mock`**: Update `MockTmuxAgentRepository.createAgentSession` to accept project- and feature-scoped requests (nil `ticketId`). Derive session name from scope; return a valid `AgentSession`.
+- **`service-spawn-sheet`**: Multi-step spawn sheet with cascading pickers (project → feature → ticket). Scope is determined by the entry-point context — pre-populated levels are shown as labels, unpopulated levels as pickers. Ticket level includes an inline "New ticket" path. Spawn button calls `createAgentSession` then navigates to the new terminal session.
+- **`service-spawn-wiring`**: Wire spawn entry points across the app — Sessions tab `+` button (full scope picker), `FeatureDetail` Sessions sub-tab (feature pre-filled), `ProjectDetail` sessions section (project pre-filled). Replace all existing "Spawn session" stubs.
+
 ## Sequencing and dependencies
 
 ```
 [infra-openapi-regen] ── [infra-design-tokens] ── [infra-component-kit]
                 │
-                ├── [service-repo-tickets]
-                ├── [service-repo-docs]
-                ├── [service-repo-decisions]
-                ├── [service-repo-activity]
-                ├── [service-repo-agent-sessions]
-                └── [service-repo-review]
+                ├── Phase-2 repo tickets (parallel)
                             │
                             ▼
                 [service-tab-shell] ── [service-app-route-coordinator]
                             │
                             ▼
-              ┌──── all the Phase-3 screen tickets in parallel ────┐
-              ▼                                                   ▼
-    [service-inbox-screen]                               [service-you-screen]
+              Phase-3 screen tickets (parallel)
                             │
                             ▼
-                  Phase-4 terminal tickets in order
+                Phase-4 terminal tickets (in order)
                             │
                             ▼
                        Phase-5 polish
+                       /           \
+           [infra-apns-backend]  [infra-spawn-scope]
+                   │                     │
+              Phase-6 push          Phase-7 spawn
+          (push-permission,        (ticket-detail,
+           push-deep-link,          spawn-mock →
+           push-settings)           spawn-sheet →
+                                    spawn-wiring)
 ```
 
-The phases are loose — once Phase 0 lands, repository tickets and the tab shell can move in parallel. Screen tickets only need their repository methods plus the shell. Terminal Phase 4 is independent of the screen tickets except where Sessions / Inbox link to it.
+Phases 6 and 7 are independent of each other and can run in parallel once their respective backend contracts land. `service-spawn-mock` and `service-ticket-detail` can start immediately (no backend needed); `service-spawn-sheet` and `service-spawn-wiring` need `service-spawn-mock` first and can switch to live when `infra-spawn-scope` is merged.
 
 ## Backend dependency
 
-All of the contract work is already done. **No backend tickets are required for this iOS effort.** If something is missing during implementation, raise a fix-prefixed iOS ticket *and* a separate ticket in the parent repo — do not add iOS-side endpoints that don't exist in `../api/openapi.yaml`.
+Phases 0–5 required no backend changes — the contract was already complete. **Phases 6 and 7 each need new backend endpoints** before their live paths can be exercised on device. The `infra-*-backend` tickets must land in the parent repo first; the `infra-*-openapi-regen` tickets then pull those changes into the iOS generated client. iOS-side work can proceed against the mock in the interim.
 
 ## Out of scope for this plan
 
-- Push notifications (background mentions / questions): noted but not ticketed yet.
-- Search across projects/features/tickets: design shows a search icon but no flow; defer.
-- Onboarding / first-run server URL prompt: existing `SettingsView` covers it; revisit when the You screen lands.
+- Search across projects/features/tickets: design shows a search icon but no flow defined; defer.
+- Onboarding / first-run server URL prompt: existing `SettingsView` covers it; revisit later.
 - Watch / multi-window / iPad split view: not in the v2 design.
-- Tickets ▸ session spawning UX inside the terminal screen (the "Spawn session" button on FeatureDetail kicks off a different flow than swapping panes mid-terminal).
 
 ## Where to look next
 
@@ -169,4 +187,6 @@ All of the contract work is already done. **No backend tickets are required for 
 - Tab shell, routes, and the repository protocol expansion: `20-navigation-and-data.md`.
 - Per-screen detail and component composition: `30-screens.md`.
 - Terminal transport, rendering, and ergonomics: `40-terminal.md`.
+- Push notification architecture and flow: `60-push-notifications.md`.
+- Ticket detail and multi-scope spawn UX: `70-spawn-ux.md`.
 - Tickets: `.tickets/` (todo) and `.tickets/done/` (completed).
