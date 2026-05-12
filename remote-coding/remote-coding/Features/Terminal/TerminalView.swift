@@ -92,6 +92,22 @@ struct TerminalView: View {
             )
             .presentationDetents([.medium])
         }
+        .sheet(isPresented: Binding(
+            get: { viewModel.showDetailSheet },
+            set: { viewModel.showDetailSheet = $0 }
+        )) {
+            if let session = viewModel.session {
+                SessionDetailSheet(
+                    session: session,
+                    scopeContext: viewModel.scopeContext,
+                    onKill: {
+                        do {
+                            try await appModel.repository.killAgentSession(id: session.id)
+                        } catch { }
+                    }
+                )
+            }
+        }
         .onDisappear {
             viewModel.closeSocket()
             appModel.activityPoller.start(scope: .workspace)
@@ -108,7 +124,7 @@ struct TerminalView: View {
                 }
                 Spacer()
                 Button {
-                    // dots menu — future ticket
+                    viewModel.showDetailSheet = true
                 } label: {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 17, weight: .regular))
@@ -123,6 +139,13 @@ struct TerminalView: View {
                     Text("session-\(s.id)")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(.white)
+                    if let scope = viewModel.scopeTitle {
+                        Text(scope)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Theme.Text.fg2(.dark))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
                     Text("\(s.tmuxSession) · \(s.paneDisplayLabel) · \(s.uptime)")
                         .font(.system(size: 10.5, design: .monospaced))
                         .foregroundStyle(Theme.Text.fg2(.dark))

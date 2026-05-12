@@ -703,6 +703,29 @@ final class MockTmuxAgentRepository: TmuxAgentRepository {
             .replacingOccurrences(of: " ", with: "_")
     }
 
+    func killAgentSession(id: Int64) async throws {
+        guard let index = agentSessions.firstIndex(where: { $0.id == id }) else {
+            throw MockRepositoryError.notFound
+        }
+        agentSessions[index] = Components.Schemas.AgentSession(
+            id: agentSessions[index].id,
+            ticketId: agentSessions[index].ticketId,
+            featureId: agentSessions[index].featureId,
+            projectId: agentSessions[index].projectId,
+            tmuxSession: agentSessions[index].tmuxSession,
+            state: .ended,
+            pane: agentSessions[index].pane,
+            cpu: 0,
+            startTime: agentSessions[index].startTime,
+            endTime: Date(),
+            lastActiveAt: agentSessions[index].lastActiveAt,
+            transcriptKey: agentSessions[index].transcriptKey,
+            tokenUsage: agentSessions[index].tokenUsage,
+            costEstimate: agentSessions[index].costEstimate,
+            createdAt: agentSessions[index].createdAt
+        )
+    }
+
     // MARK: Ticket review
 
     func getTicketDiff(publicID: String) async throws -> Components.Schemas.TicketDiff {

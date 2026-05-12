@@ -18,6 +18,21 @@ final class TerminalViewModel {
     var isSending = false
     var errorMessage: String?
     var showSpawnSheet = false
+    var showDetailSheet = false
+
+    /// Resolved human-readable scope name for the context bar subtitle.
+    /// E.g. "Pane registry cleanup" (ticket) / "Terminal streaming" (feature) / "tmux-agent" (project).
+    var scopeTitle: String?
+
+    /// Full scope context resolved after load — shown in `SessionDetailSheet`.
+    struct ScopeContext: Equatable, Sendable {
+        var kind: Kind
+        var label: String
+        var parentLabel: String?
+
+        enum Kind: Sendable { case ticket, feature, project }
+    }
+    var scopeContext: ScopeContext?
 
     private(set) var socketStatus: WebSocketStatus = .disconnected(nil)
 
@@ -50,10 +65,60 @@ final class TerminalViewModel {
             if let config = apiConfiguration {
                 openSocket(session: s, configuration: config)
             }
+            await loadScope(for: s, repository: repository)
         } catch {
             errorMessage = error.localizedDescription
         }
         isLoading = false
+    }
+
+    /// Resolves the session's scope (ticket/feature/project) into human-readable labels.
+    func loadScope(for s: Components.Schemas.AgentSession, repository: TmuxAgentRepository) async {
+        if let ticketID = s.ticketId {
+            // Walk tickets to find by id
+            do {
+                let projects = try await repository.listProjects()
+                for project in projects {
+                    let features = (try? await repository.listFeatures(projectIDOrSlug: String(project.id))) ?? []
+                    for feature in features {
+                        let tickets = (try? await repository.listTickets(featureID: feature.id, status: nil)) ?? []
+                        if let ticket = tickets.first(where: { $0.id == ticketID }) {
+                            scopeTitle = ticket.title
+                            scopeContext = ScopeContext(
+                                kind: .ticket,
+                                label: "\(ticket.publicId) · \(ticket.title)",
+                                parentLabel: "\(feature.title) · \(project.name)"
+                            )
+                            return
+                        }
+                    }
+                }
+            } catch {}
+        } else if let featureID = s.featureId {
+            do {
+                let feature = try await repository.getFeature(id: featureID)
+                let projects = try await repository.listProjects()
+                let project = projects.first { p in
+                    (try? feature.projectId == p.id) ?? false
+                }
+                scopeTitle = feature.title
+                scopeContext = ScopeContext(
+                    kind: .feature,
+                    label: "FEAT-\(String(format: "%03d", feature.id)) · \(feature.title)",
+                    parentLabel: project?.name
+                )
+            } catch {}
+        } else if let projectID = s.projectId {
+            do {
+                let project = try await repository.getProject(idOrSlug: String(projectID))
+                scopeTitle = project.name
+                scopeContext = ScopeContext(
+                    kind: .project,
+                    label: project.name,
+                    parentLabel: nil
+                )
+            } catch {}
+        }
     }
 
     // Loads sibling sessions from the same project by iterating projects until
