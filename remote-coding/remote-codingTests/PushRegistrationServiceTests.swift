@@ -181,6 +181,131 @@ struct PushRegistrationServiceTests {
         #expect(repo.registeredDevices.isEmpty)
     }
 
+    // MARK: - setMasterToggle / setMutedProjectIDs / setQuietHours
+
+    @Test func masterToggleOffCallsDeregister() async throws {
+        let repo = MockTmuxAgentRepository()
+        let prefs = makePreferences()
+        let push = MockPushSystem(initialStatus: .authorized)
+        let service = makeService(repository: repo, preferences: prefs, pushSystem: push)
+
+        await service.applyDeviceToken(Data([0xff, 0xee]))
+        #expect(prefs.pushToken == "ffee")
+
+        await service.setMasterToggle(false)
+
+        #expect(repo.deregisteredDeviceTokens == ["ffee"])
+        #expect(prefs.pushToken == nil)
+    }
+
+    @Test func masterToggleOnRunsPermissionFlow() async throws {
+        let repo = MockTmuxAgentRepository()
+        let prefs = makePreferences()
+        let push = MockPushSystem(initialStatus: .notDetermined, grantsAuthorization: true)
+        let service = makeService(repository: repo, preferences: prefs, pushSystem: push)
+
+        await service.setMasterToggle(true)
+
+        #expect(push.requestedAuthorization == true)
+        #expect(push.registerForRemoteCallCount == 1)
+    }
+
+    @Test func settingMutedProjectsReRegistersWithUpdatedList() async throws {
+        let repo = MockTmuxAgentRepository()
+        let prefs = makePreferences()
+        let push = MockPushSystem(initialStatus: .authorized)
+        let service = makeService(repository: repo, preferences: prefs, pushSystem: push)
+
+        await service.applyDeviceToken(Data([0x01]))
+        #expect(repo.registeredDevices.count == 1)
+
+        await service.setMutedProjectIDs([3, 4])
+
+        #expect(prefs.mutedProjectIDs == [3, 4])
+        #expect(repo.registeredDevices.count == 1) // upsert
+        #expect(repo.registeredDevices.first?.mutedProjectIds == [3, 4])
+    }
+
+    @Test func settingMutedProjectsWithoutTokenIsNoOpForServer() async throws {
+        let repo = MockTmuxAgentRepository()
+        let prefs = makePreferences()
+        let push = MockPushSystem()
+        let service = makeService(repository: repo, preferences: prefs, pushSystem: push)
+
+        await service.setMutedProjectIDs([7])
+
+        #expect(prefs.mutedProjectIDs == [7]) // local prefs still updated
+        #expect(repo.registeredDevices.isEmpty)
+    }
+
+    @Test func settingQuietHoursReRegistersWithUpdatedRange() async throws {
+        let repo = MockTmuxAgentRepository()
+        let prefs = makePreferences()
+        let push = MockPushSystem(initialStatus: .authorized)
+        let service = makeService(repository: repo, preferences: prefs, pushSystem: push)
+
+        await service.applyDeviceToken(Data([0x01]))
+
+        await service.setQuietHours(start: 21, end: 6)
+
+        #expect(prefs.quietHoursStart == 21)
+        #expect(prefs.quietHoursEnd == 6)
+        #expect(repo.registeredDevices.first?.quietHoursStart == 21)
+        #expect(repo.registeredDevices.first?.quietHoursEnd == 6)
+    }
+
+    @Test func settingQuietHoursToNilClearsTheWindow() async throws {
+        let repo = MockTmuxAgentRepository()
+        let prefs = makePreferences()
+        prefs.quietHoursStart = 22
+        prefs.quietHoursEnd = 7
+        let push = MockPushSystem(initialStatus: .authorized)
+        let service = makeService(repository: repo, preferences: prefs, pushSystem: push)
+        await service.applyDeviceToken(Data([0x01]))
+
+        await service.setQuietHours(start: nil, end: nil)
+
+        #expect(prefs.quietHoursStart == nil)
+        #expect(prefs.quietHoursEnd == nil)
+    }
+
+    // MARK: - refreshStatus
+
+    @Test func refreshStatusDoesNotPrompt() async throws {
+        let repo = MockTmuxAgentRepository()
+        let prefs = makePreferences()
+        let push = MockPushSystem(initialStatus: .notDetermined)
+        let service = makeService(repository: repo, preferences: prefs, pushSystem: push)
+
+        await service.refreshStatus()
+
+        #expect(push.requestedAuthorization == false)
+        #expect(service.status == .notDetermined)
+    }
+
+    @Test func refreshStatusReflectsDenied() async throws {
+        let repo = MockTmuxAgentRepository()
+        let prefs = makePreferences()
+        let push = MockPushSystem(initialStatus: .denied)
+        let service = makeService(repository: repo, preferences: prefs, pushSystem: push)
+
+        await service.refreshStatus()
+
+        #expect(service.status == .denied)
+    }
+
+    @Test func refreshStatusReportsRegisteredWhenTokenStored() async throws {
+        let repo = MockTmuxAgentRepository()
+        let prefs = makePreferences()
+        prefs.pushToken = "cafebabe"
+        let push = MockPushSystem(initialStatus: .authorized)
+        let service = makeService(repository: repo, preferences: prefs, pushSystem: push)
+
+        await service.refreshStatus()
+
+        #expect(service.status == .registered(token: "cafebabe"))
+    }
+
     // MARK: - handleRegistrationFailure
 
     @Test func handleRegistrationFailureRecordsErrorWithoutThrowing() async throws {
