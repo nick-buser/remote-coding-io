@@ -14,6 +14,9 @@ enum DocBlock: Equatable, Sendable {
     case codeBlock(language: String?, text: String)
     case blockquote(blocks: [DocBlock])
     case taskList(items: [TaskItem])
+    case table(headers: [String], rows: [[String]])
+    case horizontalRule
+    case image(src: String, alt: String?)
     case unsupported(type: String)
 }
 
@@ -86,9 +89,39 @@ enum DocBlockDecoder {
             return .blockquote(blocks: content.map(decodeBlock))
         case "taskList":
             return .taskList(items: content.compactMap(decodeTaskItem))
+        case "table":
+            return decodeTable(rows: content)
+        case "horizontalRule":
+            return .horizontalRule
+        case "image":
+            let src = (attrs?["src"] as? String) ?? ""
+            let alt = attrs?["alt"] as? String
+            return .image(src: src, alt: alt?.isEmpty == false ? alt : nil)
         default:
             return .unsupported(type: type)
         }
+    }
+
+    private static func decodeTable(rows tableRows: [[String: Any]]) -> DocBlock {
+        var headers: [String] = []
+        var rows: [[String]] = []
+        for row in tableRows {
+            guard row["type"] as? String == "tableRow" else { continue }
+            let cells = row["content"] as? [[String: Any]] ?? []
+            let isHeader = cells.first?["type"] as? String == "tableHeader"
+            let texts = cells.map { cell -> String in
+                let inner = cell["content"] as? [[String: Any]] ?? []
+                return inner.flatMap { node -> [String] in
+                    textRuns(from: node["content"] as? [[String: Any]] ?? []).map(\.text)
+                }.joined(separator: " ")
+            }
+            if isHeader {
+                headers = texts
+            } else {
+                rows.append(texts)
+            }
+        }
+        return .table(headers: headers, rows: rows)
     }
 
     /// Flatten an array of inline `text` nodes into `TextRun`s.

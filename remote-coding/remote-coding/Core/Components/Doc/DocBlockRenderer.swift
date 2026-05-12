@@ -35,6 +35,12 @@ struct DocBlockRenderer: View {
             return AnyView(blockquote(blocks: inner))
         case .taskList(let items):
             return AnyView(taskList(items: items))
+        case .table(let headers, let rows):
+            return AnyView(table(headers: headers, rows: rows))
+        case .horizontalRule:
+            return AnyView(horizontalRule())
+        case .image(let src, let alt):
+            return AnyView(imageBlock(src: src, alt: alt))
         case .unsupported(let type):
             return AnyView(unsupported(type: type))
         }
@@ -154,6 +160,91 @@ struct DocBlockRenderer: View {
                 }
             }
         }
+    }
+
+    // MARK: - Table
+
+    private func table(headers: [String], rows: [[String]]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if !headers.isEmpty {
+                tableRow(cells: headers, isHeader: true)
+                Divider().background(Theme.Surface.sep(scheme))
+            }
+            ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                tableRow(cells: row, isHeader: false)
+                if index < rows.count - 1 {
+                    Divider().background(Theme.Surface.sep(scheme))
+                }
+            }
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.Radius.r2, style: .continuous)
+                .stroke(Theme.Surface.sep(scheme), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.r2, style: .continuous))
+    }
+
+    private func tableRow(cells: [String], isHeader: Bool) -> some View {
+        HStack(spacing: 0) {
+            ForEach(Array(cells.enumerated()), id: \.offset) { index, cell in
+                Text(cell)
+                    .font(.system(size: 14, weight: isHeader ? .semibold : .regular))
+                    .foregroundStyle(Theme.Text.fg(scheme))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if index < cells.count - 1 {
+                    Divider().background(Theme.Surface.sep(scheme))
+                }
+            }
+        }
+        .background(isHeader ? Theme.Surface.chip(scheme) : .clear)
+    }
+
+    // MARK: - Horizontal rule
+
+    private func horizontalRule() -> some View {
+        Divider()
+            .padding(.vertical, 4)
+    }
+
+    // MARK: - Image
+
+    private func imageBlock(src: String, alt: String?) -> some View {
+        Group {
+            if let url = URL(string: src) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let img):
+                        img.resizable()
+                            .scaledToFit()
+                            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.r2, style: .continuous))
+                    default:
+                        imagePlaceholder(alt: alt)
+                    }
+                }
+            } else {
+                imagePlaceholder(alt: alt)
+            }
+        }
+    }
+
+    private func imagePlaceholder(alt: String?) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "photo")
+                .foregroundStyle(Theme.Text.fg2(scheme))
+            if let alt {
+                Text(alt)
+                    .themeCaption()
+                    .foregroundStyle(Theme.Text.fg2(scheme))
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.Radius.r2, style: .continuous)
+                .stroke(Theme.Text.fg3(scheme), lineWidth: 1)
+        )
     }
 
     // MARK: - Unsupported

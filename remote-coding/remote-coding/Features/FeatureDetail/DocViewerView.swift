@@ -1,13 +1,12 @@
 import SwiftUI
 
-/// Read-only doc viewer mounted on `.docDetail(docID:)`.
+/// Doc viewer + editor mounted on `.docDetail(docID:)`.
 ///
-/// Loads the doc via `repository.getDoc(id:)`, renders its title +
-/// meta eyebrow, then hands `body_blocks` off to `DocBlockRenderer`.
-/// The trailing dots menu wires `Pin / Unpin` (via `updateDoc`) and
-/// `Delete` (via `deleteDoc`); editing the body is intentionally
-/// out of scope and lands with the Runestone integration in
-/// Phase 4 / 5.
+/// In view mode renders the title/meta hero + `DocBlockRenderer`.
+/// In edit mode the hero collapses to a `TextField` and the body is
+/// replaced by a Runestone-backed Markdown editor. Tapping "Done"
+/// re-encodes the Markdown through `DocMarkdownParser` + `DocTipTapEncoder`
+/// and calls `updateDoc`.
 struct DocViewerView: View {
     let docID: Int64
 
@@ -22,7 +21,37 @@ struct DocViewerView: View {
     @State private var errorMessage: String?
     @State private var didDelete = false
 
+    // Edit mode
+    @State private var isEditing = false
+    @State private var draftTitle = ""
+    @State private var draftMarkdown = ""
+    @State private var isSaving = false
+    @FocusState private var titleFocused: Bool
+
     var body: some View {
+        Group {
+            if isEditing {
+                editorLayout
+            } else {
+                viewerLayout
+            }
+        }
+        .background(Theme.Surface.bg(scheme))
+        .toolbar(.hidden, for: .navigationBar)
+        .task(id: docID) {
+            await load()
+        }
+        .refreshable {
+            await load()
+        }
+        .onChange(of: didDelete) { _, finished in
+            if finished { dismiss() }
+        }
+    }
+
+    // MARK: - Viewer layout
+
+    private var viewerLayout: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Spacing.s4) {
                 topBar
@@ -42,24 +71,74 @@ struct DocViewerView: View {
             }
             .padding(.bottom, Theme.Spacing.s5)
         }
-        .background(Theme.Surface.bg(scheme))
-        .toolbar(.hidden, for: .navigationBar)
-        .task(id: docID) {
-            await load()
-        }
-        .refreshable {
-            await load()
-        }
-        .onChange(of: didDelete) { _, finished in
-            if finished { dismiss() }
+    }
+
+    // MARK: - Editor layout
+
+    private var editorLayout: some View {
+        VStack(spacing: 0) {
+            editorTopBar
+            Divider().background(Theme.Surface.sep(scheme))
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    titleField
+                    Divider()
+                        .padding(.horizontal, Theme.Spacing.s4)
+                        .padding(.vertical, Theme.Spacing.s2)
+                    RunestoneTextSurface(
+                        attributedText: AttributedString(draftMarkdown),
+                        isEditable: true,
+                        onChange: { draftMarkdown = $0 },
+                        theme: .docLight
+                    )
+                    .frame(minHeight: 420)
+                }
+                .padding(.bottom, Theme.Spacing.s5)
+            }
         }
     }
+
+    private var editorTopBar: some View {
+        HStack {
+            Button("Cancel") {
+                isEditing = false
+            }
+            .foregroundStyle(Theme.Text.fg2(scheme))
+            Spacer()
+            Text("Edit Doc")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Theme.Text.fg(scheme))
+            Spacer()
+            Button(isSaving ? "Saving…" : "Done") {
+                Task { await commitEdits() }
+            }
+            .disabled(isSaving)
+            .foregroundStyle(appModel.accent.value(for: scheme))
+            .fontWeight(.semibold)
+        }
+        .padding(.horizontal, Theme.Spacing.s4)
+        .padding(.vertical, 12)
+    }
+
+    private var titleField: some View {
+        TextField("Title", text: $draftTitle)
+            .font(.system(size: 26, weight: .bold))
+            .foregroundStyle(Theme.Text.fg(scheme))
+            .padding(.horizontal, Theme.Spacing.s4)
+            .padding(.top, Theme.Spacing.s3)
+            .padding(.bottom, Theme.Spacing.s2)
+            .focused($titleFocused)
+    }
+
+    // MARK: - Viewer sub-views
 
     private var topBar: some View {
         QuietHeader(label: doc?.title ?? "Doc") {
             BackChevron(label: "Back", accent: appModel.accent) { dismiss() }
         } trailing: {
             Menu {
+                Button("Edit") { enterEditMode() }
+                    .disabled(doc == nil)
                 Button(doc?.pinned == true ? "Unpin" : "Pin") {
                     Task { await togglePin() }
                 }
@@ -107,7 +186,7 @@ struct DocViewerView: View {
         EmptyState(
             systemImage: "doc.append",
             title: "No content yet",
-            message: "This doc has an empty body. Editing arrives with the Runestone integration."
+            message: "Tap ··· → Edit to start writing."
         )
     }
 
@@ -119,7 +198,38 @@ struct DocViewerView: View {
         return kind
     }
 
-    // MARK: - Load + actions
+    // MARK: - Actions
+
+    private func enterEditMode() {
+        guard let doc else { return }
+        draftTitle = doc.title
+        draftMarkdown = DocMarkdownSerializer.serialize(blocks)
+        isEditing = true
+    }
+
+    @MainActor
+    private func commitEdits() async {
+        guard let current = doc else { return }
+        isSaving = true
+        defer { isSaving = false }
+        let newBlocks = DocMarkdownParser.parse(draftMarkdown)
+        let newBodyBlocks = DocTipTapEncoder.encode(newBlocks)
+        let titleChanged = draftTitle.trimmingCharacters(in: .whitespacesAndNewlines) != current.title
+        let body = Components.Schemas.UpdateDocRequest(
+            kind: nil,
+            title: titleChanged ? draftTitle.trimmingCharacters(in: .whitespacesAndNewlines) : nil,
+            bodyBlocks: newBodyBlocks,
+            pinned: nil
+        )
+        do {
+            let updated = try await appModel.repository.updateDoc(id: current.id, body: body)
+            doc = updated
+            blocks = DocBlockDecoder.decode(updated.bodyBlocks)
+            isEditing = false
+        } catch {
+            errorMessage = "Couldn't save: \(error.localizedDescription)"
+        }
+    }
 
     @MainActor
     private func load() async {
@@ -161,4 +271,21 @@ struct DocViewerView: View {
             errorMessage = "Couldn't delete doc: \(error.localizedDescription)"
         }
     }
+}
+
+#Preview("DocViewer — light") {
+    let appModel = AppModel(repository: MockTmuxAgentRepository())
+    return NavigationStack {
+        DocViewerView(docID: 1)
+    }
+    .environment(appModel)
+}
+
+#Preview("DocViewer — dark") {
+    let appModel = AppModel(repository: MockTmuxAgentRepository())
+    return NavigationStack {
+        DocViewerView(docID: 1)
+    }
+    .environment(appModel)
+    .preferredColorScheme(.dark)
 }
