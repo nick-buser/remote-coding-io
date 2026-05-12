@@ -182,7 +182,7 @@ struct LogDecisionSheet: View {
     @Environment(\.colorScheme) private var scheme
 
     @State private var title: String = ""
-    @State private var body: String = ""
+    @State private var bodyText: String = ""
     @State private var actor: Components.Schemas.DecisionActor = .human
     @State private var actorName: String = ""
     @State private var isSubmitting = false
@@ -196,7 +196,7 @@ struct LogDecisionSheet: View {
                         .textInputAutocapitalization(.sentences)
                 }
                 Section("Body") {
-                    TextField("Why? (optional)", text: $body, axis: .vertical)
+                    TextField("Why? (optional)", text: $bodyText, axis: .vertical)
                         .lineLimit(3...8)
                         .textInputAutocapitalization(.sentences)
                 }
@@ -261,7 +261,7 @@ struct LogDecisionSheet: View {
         guard !trimmedTitle.isEmpty, !isSubmitting else { return }
         isSubmitting = true
         defer { isSubmitting = false }
-        let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedBody = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedActor = actorName.trimmingCharacters(in: .whitespacesAndNewlines)
         let request = Components.Schemas.CreateDecisionRequest(
             title: trimmedTitle,

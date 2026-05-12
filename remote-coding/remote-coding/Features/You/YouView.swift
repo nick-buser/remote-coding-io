@@ -272,7 +272,7 @@ struct YouView: View {
 
     private func section<Content: View>(
         title: String,
-        @ViewBuilder content: () -> Content
+        @ViewBuilder content: @escaping () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s2) {
             Text(title.uppercased())

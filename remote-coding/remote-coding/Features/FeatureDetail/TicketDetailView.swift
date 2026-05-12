@@ -100,13 +100,26 @@ struct TicketDetailView: View {
             if let estimate = viewModel.ticket.estimate, !estimate.isEmpty {
                 Text(estimate)
                     .themeMonoSm()
-                    .foregroundStyle(Theme.Text.fg(scheme))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
                     .overlay(
                         RoundedRectangle(cornerRadius: 4, style: .continuous)
                             .stroke(Theme.Text.fg3(scheme), lineWidth: 1)
                     )
+                    .foregroundStyle(Theme.Text.fg2(scheme))
+                StatusPill(role: TicketStatusStyle.glyphRole(for: ticket.status), label: TicketStatusStyle.label(for: ticket.status))
+                Spacer()
+                if !ticket.estimate.isEmpty {
+                    Text(ticket.estimate)
+                        .themeMonoSm()
+                        .foregroundStyle(Theme.Text.fg(scheme))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                .stroke(Theme.Text.fg3(scheme), lineWidth: 1)
+                        )
+                }
             }
         }
         .padding(.horizontal, Theme.Spacing.s4)

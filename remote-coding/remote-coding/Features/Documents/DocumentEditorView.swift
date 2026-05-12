@@ -24,11 +24,10 @@ struct DocumentEditorView: View {
             }
 
             RunestoneTextSurface(
-                text: Binding(
-                    get: { viewModel.draft },
-                    set: { viewModel.draft = $0 }
-                ),
-                isEditable: true
+                attributedText: AttributedString(viewModel.draft),
+                isEditable: true,
+                onChange: { viewModel.draft = $0 },
+                theme: .docLight
             )
         }
         .navigationTitle(viewModel.document.title)

@@ -10,11 +10,11 @@ struct QuickKeysRow: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
-                ForEach(primaryKeys, id: \.label) { item in
+                ForEach(Self.primaryKeys, id: \.label) { item in
                     QuickKey(label: item.label, onTap: { onKey(item.wireKey) })
                 }
                 // More-keys overflow (less-common sequences)
-                ForEach(extraKeys, id: \.label) { item in
+                ForEach(Self.extraKeys, id: \.label) { item in
                     QuickKey(label: item.label, onTap: { onKey(item.wireKey) })
                 }
             }

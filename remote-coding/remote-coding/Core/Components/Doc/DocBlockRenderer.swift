@@ -19,25 +19,24 @@ struct DocBlockRenderer: View {
         }
     }
 
-    @ViewBuilder
-    private func renderBlock(_ block: DocBlock) -> some View {
+    private func renderBlock(_ block: DocBlock) -> AnyView {
         switch block {
         case .heading(let level, let runs):
-            heading(level: level, runs: runs)
+            return AnyView(heading(level: level, runs: runs))
         case .paragraph(let runs):
-            paragraph(runs: runs)
+            return AnyView(paragraph(runs: runs))
         case .bulletList(let items):
-            bulletList(items: items, ordered: false)
+            return AnyView(bulletList(items: items, ordered: false))
         case .orderedList(let items):
-            bulletList(items: items, ordered: true)
+            return AnyView(bulletList(items: items, ordered: true))
         case .codeBlock(let language, let text):
-            codeBlock(language: language, text: text)
+            return AnyView(codeBlock(language: language, text: text))
         case .blockquote(let inner):
-            blockquote(blocks: inner)
+            return AnyView(blockquote(blocks: inner))
         case .taskList(let items):
-            taskList(items: items)
+            return AnyView(taskList(items: items))
         case .unsupported(let type):
-            unsupported(type: type)
+            return AnyView(unsupported(type: type))
         }
     }
 
