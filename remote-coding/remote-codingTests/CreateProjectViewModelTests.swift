@@ -55,6 +55,7 @@ struct CreateProjectViewModelTests {
         #expect(vm.slug == "custom-slug")
     }
 
+    @MainActor
     @Test func deriveSlugStripsLeadingTrailingDashesAndCollapsesRuns() async {
         #expect(CreateProjectViewModel.deriveSlug(from: "  __Hello   World!! ") == "hello-world")
         #expect(CreateProjectViewModel.deriveSlug(from: "ALL CAPS") == "all-caps")
@@ -64,6 +65,7 @@ struct CreateProjectViewModelTests {
 
     // MARK: - Field error mapping
 
+    @MainActor
     @Test func fieldErrorMapperHandlesContractAndCamelPaths() async {
         #expect(CreateProjectViewModel.fieldErrorMapper(rawField: "name") == .name)
         #expect(CreateProjectViewModel.fieldErrorMapper(rawField: "slug") == .slug)
@@ -75,6 +77,7 @@ struct CreateProjectViewModelTests {
         #expect(CreateProjectViewModel.fieldErrorMapper(rawField: "unknown_field") == nil)
     }
 
+    @MainActor
     @Test func fieldErrorMapperUsesLeadingSegment() async {
         // Nested validators emit field paths like "slug.format" — we
         // route on the leading segment so the form's slug field still

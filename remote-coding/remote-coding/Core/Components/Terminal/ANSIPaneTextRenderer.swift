@@ -19,7 +19,8 @@ struct ANSIPaneTextRenderer: PaneTextRenderer {
 
         func flush(upTo end: Int) {
             guard end > runStart else { return }
-            let text = String(scalars[runStart..<end])
+            var text = ""
+            text.unicodeScalars.append(contentsOf: scalars[runStart..<end])
             result += AttributedString(text, attributes: Self.makeAttributes(for: state))
             runStart = end
         }

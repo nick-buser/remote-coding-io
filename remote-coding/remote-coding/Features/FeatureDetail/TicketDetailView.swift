@@ -59,8 +59,8 @@ struct TicketDetailView: View {
                     .foregroundStyle(Theme.Text.fg2(scheme))
                 StatusPill(role: TicketStatusStyle.glyphRole(for: ticket.status), label: TicketStatusStyle.label(for: ticket.status))
                 Spacer()
-                if let estimate = ticket.estimate, !estimate.isEmpty {
-                    Text(estimate)
+                if !ticket.estimate.isEmpty {
+                    Text(ticket.estimate)
                         .themeMonoSm()
                         .foregroundStyle(Theme.Text.fg(scheme))
                         .padding(.horizontal, 6)

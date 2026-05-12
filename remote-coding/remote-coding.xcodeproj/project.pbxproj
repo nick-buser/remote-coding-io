@@ -7,9 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		8C1EA2B22FAABC1200000001 /* Runestone in Frameworks */ = {isa = PBXBuildFile; productRef = 8C1EA2B12FAABC1200000001 /* Runestone */; };
 		8CFE1A972FA9738800162056 /* OpenAPIURLSession in Frameworks */ = {isa = PBXBuildFile; productRef = 8CFE1A962FA9738800162056 /* OpenAPIURLSession */; };
 		8CFE1A9C2FA9840E00162056 /* OpenAPIRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = 8CFE1A9B2FA9840E00162056 /* OpenAPIRuntime */; };
-		8C1EA2B22FAABC1200000001 /* Runestone in Frameworks */ = {isa = PBXBuildFile; productRef = 8C1EA2B12FAABC1200000001 /* Runestone */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -608,6 +608,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		8C1EA2B02FAABC1200000001 /* XCRemoteSwiftPackageReference "Runestone" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/simonbs/Runestone";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.5.2;
+			};
+		};
 		8CFE1A932FA9599B00162056 /* XCRemoteSwiftPackageReference "swift-openapi-urlsession" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/apple/swift-openapi-urlsession";
@@ -632,17 +640,14 @@
 				minimumVersion = 1.11.0;
 			};
 		};
-		8C1EA2B02FAABC1200000001 /* XCRemoteSwiftPackageReference "Runestone" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/simonbs/Runestone";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 0.3.0;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		8C1EA2B12FAABC1200000001 /* Runestone */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8C1EA2B02FAABC1200000001 /* XCRemoteSwiftPackageReference "Runestone" */;
+			productName = Runestone;
+		};
 		8CFE1A962FA9738800162056 /* OpenAPIURLSession */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 8CFE1A932FA9599B00162056 /* XCRemoteSwiftPackageReference "swift-openapi-urlsession" */;
@@ -657,11 +662,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 8CFE1A9A2FA983FF00162056 /* XCRemoteSwiftPackageReference "swift-openapi-runtime" */;
 			productName = OpenAPIRuntime;
-		};
-		8C1EA2B12FAABC1200000001 /* Runestone */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 8C1EA2B02FAABC1200000001 /* XCRemoteSwiftPackageReference "Runestone" */;
-			productName = Runestone;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

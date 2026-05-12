@@ -19,6 +19,7 @@ struct RunestoneTextSurface: UIViewRepresentable {
     var attributedText: AttributedString
     var isEditable: Bool = false
     var onCommit: ((String) -> Void)? = nil
+    var onChange: ((String) -> Void)? = nil
     var theme: RunestoneTheme = .terminalDark
 
     func makeUIView(context: Context) -> TextView {
@@ -26,7 +27,7 @@ struct RunestoneTextSurface: UIViewRepresentable {
         applyTheme(to: textView)
         textView.isEditable = isEditable
         textView.isScrollEnabled = true
-        textView.delegate = context.coordinator
+        textView.editorDelegate = context.coordinator
         return textView
     }
 
@@ -44,7 +45,7 @@ struct RunestoneTextSurface: UIViewRepresentable {
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onCommit: onCommit)
+        Coordinator(onCommit: onCommit, onChange: onChange)
     }
 
     // MARK: - Theme
@@ -53,18 +54,22 @@ struct RunestoneTextSurface: UIViewRepresentable {
         switch theme {
         case .terminalDark:
             textView.backgroundColor = UIColor(Theme.Surface.terminalBg)
-            textView.font = UIFont.monospacedSystemFont(ofSize: 13, weight: .regular)
-            textView.textColor = UIColor(Theme.Text.fg(.dark))
-            textView.contentInset = UIEdgeInsets(top: 14, left: 14, bottom: 14, right: 14)
+            textView.theme = RunestoneSurfaceTheme(
+                font: .monospacedSystemFont(ofSize: 13, weight: .regular),
+                textColor: UIColor(Theme.Text.fg(.dark))
+            )
+            textView.textContainerInset = UIEdgeInsets(top: 14, left: 14, bottom: 14, right: 14)
             textView.showLineNumbers = false
-            textView.lineWrappingEnabled = false
+            textView.isLineWrappingEnabled = false
         case .docLight:
             textView.backgroundColor = UIColor(Theme.Surface.bg(.light))
-            textView.font = UIFont.systemFont(ofSize: 14)
-            textView.textColor = UIColor(Theme.Text.fg(.light))
-            textView.contentInset = UIEdgeInsets(top: 12, left: 16, bottom: 12, right: 16)
+            textView.theme = RunestoneSurfaceTheme(
+                font: .systemFont(ofSize: 14),
+                textColor: UIColor(Theme.Text.fg(.light))
+            )
+            textView.textContainerInset = UIEdgeInsets(top: 12, left: 16, bottom: 12, right: 16)
             textView.showLineNumbers = false
-            textView.lineWrappingEnabled = true
+            textView.isLineWrappingEnabled = true
         }
     }
 
@@ -72,15 +77,53 @@ struct RunestoneTextSurface: UIViewRepresentable {
 
     final class Coordinator: NSObject, TextViewDelegate {
         var onCommit: ((String) -> Void)?
+        var onChange: ((String) -> Void)?
 
-        init(onCommit: ((String) -> Void)?) {
+        init(onCommit: ((String) -> Void)?, onChange: ((String) -> Void)?) {
             self.onCommit = onCommit
+            self.onChange = onChange
         }
 
         func textViewDidReturn(_ textView: TextView) {
             onCommit?(textView.text)
         }
+
+        func textViewDidChange(_ textView: TextView) {
+            onChange?(textView.text)
+        }
     }
+}
+
+// MARK: - Runestone theme adapter
+
+/// Conforms to Runestone's `Theme` protocol while delegating most properties
+/// to `DefaultTheme`. We only customize `font` and `textColor` for our
+/// terminal/doc presets — the rest (gutter, page guide, marked text) keep
+/// Runestone defaults since we don't render them.
+final class RunestoneSurfaceTheme: Runestone.Theme {
+    private let base = DefaultTheme()
+
+    let font: UIFont
+    let textColor: UIColor
+
+    init(font: UIFont, textColor: UIColor) {
+        self.font = font
+        self.textColor = textColor
+    }
+
+    var gutterBackgroundColor: UIColor { base.gutterBackgroundColor }
+    var gutterHairlineColor: UIColor { base.gutterHairlineColor }
+    var lineNumberColor: UIColor { base.lineNumberColor }
+    var lineNumberFont: UIFont { base.lineNumberFont }
+    var selectedLineBackgroundColor: UIColor { base.selectedLineBackgroundColor }
+    var selectedLinesLineNumberColor: UIColor { base.selectedLinesLineNumberColor }
+    var selectedLinesGutterBackgroundColor: UIColor { base.selectedLinesGutterBackgroundColor }
+    var invisibleCharactersColor: UIColor { base.invisibleCharactersColor }
+    var pageGuideHairlineColor: UIColor { base.pageGuideHairlineColor }
+    var pageGuideBackgroundColor: UIColor { base.pageGuideBackgroundColor }
+    var markedTextBackgroundColor: UIColor { base.markedTextBackgroundColor }
+
+    func textColor(for highlightName: String) -> UIColor? { base.textColor(for: highlightName) }
 }
 
 // MARK: - Previews

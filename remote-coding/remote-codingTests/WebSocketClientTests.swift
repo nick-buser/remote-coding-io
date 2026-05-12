@@ -6,6 +6,7 @@ struct WebSocketClientTests {
 
     // MARK: - URL construction
 
+    @MainActor
     @Test func httpSchemeBecomesWS() {
         let config = try! APIConfiguration(baseURLString: "http://localhost:3000")
         let client = WebSocketClient(configuration: config, sessionName: "my-session", paneID: 0)
@@ -13,6 +14,7 @@ struct WebSocketClientTests {
         #expect(url.scheme == "ws")
     }
 
+    @MainActor
     @Test func httpsSchemeBecomesWSS() {
         let config = try! APIConfiguration(baseURLString: "https://example.com")
         let client = WebSocketClient(configuration: config, sessionName: "my-session", paneID: 1)
@@ -20,6 +22,7 @@ struct WebSocketClientTests {
         #expect(url.scheme == "wss")
     }
 
+    @MainActor
     @Test func urlPathContainsSessionAndPane() {
         let config = try! APIConfiguration(baseURLString: "http://localhost:3000")
         let client = WebSocketClient(configuration: config, sessionName: "test-sess", paneID: 2)
@@ -30,6 +33,7 @@ struct WebSocketClientTests {
 
     // MARK: - Resize message
 
+    @MainActor
     @Test func resizeMessageEncodesCorrectly() throws {
         struct ResizeMessage: Decodable {
             struct Dims: Decodable { let cols: Int; let rows: Int }

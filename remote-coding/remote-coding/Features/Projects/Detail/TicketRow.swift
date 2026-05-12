@@ -50,8 +50,8 @@ struct TicketRow: View {
             Text(ticket.publicId)
                 .themeMonoSm()
                 .foregroundStyle(Theme.Text.fg2(scheme))
-            if let estimate = ticket.estimate, !estimate.isEmpty {
-                Text("· \(estimate)")
+            if !ticket.estimate.isEmpty {
+                Text("· \(ticket.estimate)")
                     .themeMonoSm()
                     .foregroundStyle(Theme.Text.fg2(scheme))
             }

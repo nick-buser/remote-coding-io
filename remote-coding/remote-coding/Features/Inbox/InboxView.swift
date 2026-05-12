@@ -328,6 +328,9 @@ private final class EmptyInboxRepository: TmuxAgentRepository {
     func listTicketAgentSessions(ticketPublicID: String) async throws -> [Components.Schemas.AgentSession] {
         try await underlying.listTicketAgentSessions(ticketPublicID: ticketPublicID)
     }
+    func getAgentSession(id: Int64) async throws -> Components.Schemas.AgentSession {
+        try await underlying.getAgentSession(id: id)
+    }
     func createAgentSession(_ body: Components.Schemas.CreateAgentSessionRequest) async throws -> Components.Schemas.AgentSession {
         try await underlying.createAgentSession(body)
     }
