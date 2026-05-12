@@ -13,6 +13,7 @@ struct ProjectListView: View {
     @Environment(\.colorScheme) private var scheme
     @State private var viewModel = ProjectListViewModel()
     @State private var showCreateSheet = false
+    @State private var showSearchSheet = false
     @State private var editingProject: Components.Schemas.Project?
     @State private var deletePendingProject: Components.Schemas.Project?
 
@@ -30,7 +31,11 @@ struct ProjectListView: View {
             await viewModel.load(repository: appModel.repository)
         }
         .refreshable {
+            appModel.searchViewModel.invalidate()
             await viewModel.load(repository: appModel.repository)
+        }
+        .sheet(isPresented: $showSearchSheet) {
+            SearchView(viewModel: appModel.searchViewModel)
         }
         .sheet(isPresented: $showCreateSheet) {
             CreateProjectSheet { project in
@@ -85,7 +90,7 @@ struct ProjectListView: View {
         LargeTitleHeader(title: "Projects", subtitle: viewModel.subtitle()) {
             HStack(spacing: 8) {
                 NavIconButton(name: .search) {
-                    // Search sheet ships in a follow-up.
+                    showSearchSheet = true
                 }
                 NavIconButton(name: .plus, accent: appModel.accent, tinted: true) {
                     showCreateSheet = true
